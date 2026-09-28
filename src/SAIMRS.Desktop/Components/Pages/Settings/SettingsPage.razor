@@ -1,0 +1,37 @@
+@page "/settings"
+@inherits AppComponentBase
+
+<div class="settings-tabs">
+    <button class="@(_tab == "general" ? "active" : "")" @onclick='() => _tab = "general"'><i class="fas fa-sliders"></i> GENERAL</button>
+    <button class="@(_tab == "account" ? "active" : "")" @onclick='() => _tab = "account"'><i class="fas fa-user-shield"></i> ACCOUNT</button>
+    <button class="@(_tab == "backup" ? "active" : "")" @onclick='() => _tab = "backup"'><i class="fas fa-database"></i> DATA BACKUP</button>
+</div>
+
+<div class="settings-panel">
+    @switch (_tab)
+    {
+        case "account":
+            <AccountTab />
+            break;
+        case "backup":
+            <DataBackupTab />
+            break;
+        default:
+            <GeneralSettingsTab />
+            break;
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "tab")] public string? TabQuery { get; set; }
+
+    private string _tab = "general";
+
+    protected override void OnInitialized() => Page.SetTitle("Settings");
+
+    protected override void OnParametersSet()
+    {
+        if (TabQuery is "account" or "backup" or "general")
+            _tab = TabQuery;
+    }
+}

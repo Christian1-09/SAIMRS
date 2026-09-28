@@ -1,0 +1,146 @@
+@page "/reports"
+@inherits AppComponentBase
+
+<div class="report-grid">
+    @foreach (var info in ReportCatalog.All)
+    {
+        var type = info.Type;
+        <button class="report-card @(_request.Type == type ? "selected" : "")" @onclick="() => SelectAsync(type)">
+            <i class="fas @info.Icon"></i>
+            <h4>@info.Title</h4>
+            <p>@info.Description</p>
+        </button>
+    }
+</div>
+
+<div class="chart-card">
+    <div class="report-toolbar">
+        <div class="chart-title" style="margin:0">@ReportCatalog.Get(_request.Type).Title — preview</div>
+        <div class="filters" style="margin:0">
+            @if (SelectedInfo.UsesDateRange)
+            {
+                <span class="filter-label">From</span>
+                <input type="date" @bind="_request.From" @bind:after="LoadAsync" />
+                <span class="filter-label">To</span>
+                <input type="date" @bind="_request.To" @bind:after="LoadAsync" />
+            }
+            @if (SelectedInfo.UsesCategory)
+            {
+                <select @bind="_request.CategoryId" @bind:after="LoadAsync">
+                    <option value="">All categories</option>
+                    @foreach (var c in _categories)
+                    {
+                        <option value="@c.Id">@c.Name</option>
+                    }
+                </select>
+            }
+            <button class="btn primary" @onclick="() => ExportAsync(ExportFormat.Pdf)" disabled="@Busy"><i class="fas fa-file-pdf"></i> Export PDF</button>
+            <button class="btn ghost" @onclick="() => ExportAsync(ExportFormat.Excel)" disabled="@Busy"><i class="fas fa-file-excel"></i> Export Excel</button>
+        </div>
+    </div>
+
+    @if (_document is null)
+    {
+        <div class="loading"><i class="fas fa-spinner fa-spin"></i> Building report…</div>
+    }
+    else
+    {
+        <div class="report-meta">
+            <b>@_document.FacilityName</b> · @_document.Location
+            @if (!string.IsNullOrEmpty(_document.Subtitle)) { <span> · @_document.Subtitle</span> }
+        </div>
+
+        @if (_document.Summary.Count > 0)
+        {
+            <div class="summary-row">
+                @foreach (var line in _document.Summary)
+                {
+                    <div class="summary-box"><label>@line.Label</label><span>@line.Value</span></div>
+                }
+            </div>
+        }
+
+        <div class="tbl-wrap preview">
+            <table>
+                <thead>
+                    <tr>
+                        @foreach (var col in _document.Columns)
+                        {
+                            <th class="@AlignClass(col.Align)">@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_document.Rows.Count == 0)
+                    {
+                        <tr><td colspan="@_document.Columns.Count"><EmptyState Icon="fa-file-circle-xmark" Title="No records for this report" /></td></tr>
+                    }
+                    @foreach (var row in _document.Rows.Take(PreviewLimit))
+                    {
+                        <tr>
+                            @for (var i = 0; i < _document.Columns.Count; i++)
+                            {
+                                <td class="@AlignClass(_document.Columns[i].Align)">@(i < row.Length ? row[i] : "")</td>
+                            }
+                        </tr>
+                    }
+                    @if (_document.TotalsRow is { } totals)
+                    {
+                        <tr class="totals-row">
+                            @for (var i = 0; i < _document.Columns.Count; i++)
+                            {
+                                <td class="@AlignClass(_document.Columns[i].Align)">@(i < totals.Length ? totals[i] : "")</td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_document.Rows.Count > PreviewLimit)
+        {
+            <div class="muted small" style="margin-top:8px">Showing the first @PreviewLimit of @_document.Rows.Count rows. The exported file contains all rows.</div>
+        }
+    }
+</div>
+
+@code {
+    private const int PreviewLimit = 200;
+
+    private readonly ReportRequest _request = new();
+    private ReportDocument? _document;
+    private List<CategoryDto> _categories = [];
+
+    private ReportTypeInfo SelectedInfo => ReportCatalog.Get(_request.Type);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.SetTitle("Reports");
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        _request.From = new DateOnly(today.Year, today.Month, 1);
+        _request.To = today;
+        _categories = await Use<ICategoryService>().Run(s => s.ListAsync());
+        await LoadAsync();
+    }
+
+    private async Task SelectAsync(ReportType type)
+    {
+        _request.Type = type;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _document = null;
+        StateHasChanged();
+        _document = await Use<IReportService>().Run(s => s.BuildAsync(_request));
+    }
+
+    private Task ExportAsync(ExportFormat format) => RunBusyAsync(() => ExportReportAsync(_request, format));
+
+    private static string AlignClass(ColumnAlign align) => align switch
+    {
+        ColumnAlign.Right => "num",
+        ColumnAlign.Center => "center",
+        _ => ""
+    };
+}

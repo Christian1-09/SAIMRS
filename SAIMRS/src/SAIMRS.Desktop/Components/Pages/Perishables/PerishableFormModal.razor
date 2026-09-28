@@ -1,0 +1,59 @@
+<Modal Title="@(Request.Id is null ? "Add Perishable Batch" : "Edit Perishable Batch")" Icon="fa-calendar-xmark" Error="@Error" OnClose="OnCancel">
+    <ChildContent>
+        <form id="per-form" @onsubmit="OnSave">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Item Name *</label>
+                    <input type="text" @bind="Request.ItemName" placeholder="e.g. Urea Fertilizer" maxlength="150" />
+                </div>
+                <div class="form-group">
+                    <label>Batch No. *</label>
+                    <input type="text" @bind="Request.BatchNo" placeholder="BATCH-001" maxlength="50" />
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Quantity *</label>
+                    <input type="number" min="0" step="any" @bind="Request.Quantity" />
+                </div>
+                <div class="form-group">
+                    <label>Unit</label>
+                    <select @bind="Request.Unit">
+                        @foreach (var u in Units.All)
+                        {
+                            <option value="@u">@u</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Plant / Harvest Date</label>
+                    <input type="date" @bind="Request.PlantOrHarvestDate" />
+                </div>
+                <div class="form-group">
+                    <label>Expiry Date *</label>
+                    <input type="date" @bind="Request.ExpiryDate" />
+                </div>
+            </div>
+            <div class="form-row full">
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea @bind="Request.Notes" placeholder="Optional notes…" maxlength="500"></textarea>
+                </div>
+            </div>
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="btn ghost" @onclick="OnCancel">Cancel</button>
+        <button type="submit" form="per-form" class="btn primary" disabled="@Busy"><i class="fas fa-floppy-disk"></i> Save</button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter, EditorRequired] public SavePerishableRequest Request { get; set; } = default!;
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+}

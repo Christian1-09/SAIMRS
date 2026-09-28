@@ -1,0 +1,27 @@
+@* Grouped bars: Stock IN, Stock OUT and Adjustments per month. *@
+<div class="grouped-chart">
+    @foreach (var m in Data)
+    {
+        <div class="gc-group" title="@m.Label: @m.InCount in, @m.OutCount out, @m.AdjustCount adjustments">
+            <div class="gc-bars">
+                <div class="gc-bar in" style="height:@(Pct(m.InCount))%"></div>
+                <div class="gc-bar out" style="height:@(Pct(m.OutCount))%"></div>
+                <div class="gc-bar adj" style="height:@(Pct(m.AdjustCount))%"></div>
+            </div>
+            <div class="gc-label">@m.Label</div>
+        </div>
+    }
+</div>
+<div class="gc-legend">
+    <span><i class="legend-dot" style="background:var(--green-500)"></i>Stock IN</span>
+    <span><i class="legend-dot" style="background:var(--red-400)"></i>Stock OUT</span>
+    <span><i class="legend-dot" style="background:var(--amber-400)"></i>Adjustments</span>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<MonthlyMovementDto> Data { get; set; } = [];
+
+    private int Max => Math.Max(1, Data.Select(m => Math.Max(m.InCount, Math.Max(m.OutCount, m.AdjustCount))).DefaultIfEmpty(1).Max());
+
+    private int Pct(int value) => value == 0 ? 0 : Math.Max(4, (int)Math.Round(value * 100.0 / Max));
+}

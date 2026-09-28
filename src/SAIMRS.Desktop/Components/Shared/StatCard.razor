@@ -1,0 +1,21 @@
+<div class="stat-card">
+    <div class="stat-top">
+        <span class="stat-label">@Label</span>
+        <div class="stat-icon @IconClass"><i class="fas @Icon"></i></div>
+    </div>
+    <div class="stat-val">@Value</div>
+    @if (Sub is not null)
+    {
+        <div class="stat-sub">@Sub</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public string Value { get; set; } = "0";
+    [Parameter] public string Icon { get; set; } = "fa-circle";
+
+    /// <summary>g-icon, a-icon, r-icon or b-icon.</summary>
+    [Parameter] public string IconClass { get; set; } = "g-icon";
+    [Parameter] public RenderFragment? Sub { get; set; }
+}

@@ -1,0 +1,88 @@
+@inherits AppComponentBase
+@implements IDisposable
+
+<div class="topbar">
+    <div class="topbar-heading">
+        <div class="topbar-title">@Page.Title</div>
+        <div class="topbar-sub">@DateTime.Now.ToString("MMMM yyyy")</div>
+    </div>
+
+    <div class="topbar-search">
+        <i class="fas fa-magnifying-glass"></i>
+        <input type="text" placeholder="Search inventory…" @bind="_search" @bind:event="oninput" @onkeydown="OnSearchKey" />
+    </div>
+
+    <div class="topbar-right">
+        <button class="tb-btn icon-only" title="Alerts" @onclick='() => Nav.NavigateTo("alerts")'>
+            <i class="fas fa-bell"></i>
+            @if (_alertCount > 0) { <span class="tb-count">@_alertCount</span> }
+        </button>
+        <div class="date-chip">@DateTime.Now.ToString("ddd, MMM d, yyyy")</div>
+
+        @if (Auth.Session is { } session)
+        {
+            <button class="tb-user" title="Account settings" @onclick='() => Nav.NavigateTo("settings?tab=account")'>
+                <span>@session.FullName</span>
+                <Avatar PhotoUrl="@session.PhotoDataUrl" Initials="@session.Initials" Size="32" />
+            </button>
+        }
+        <button class="tb-btn icon-only" title="Log out" @onclick="LogoutAsync"><i class="fas fa-right-from-bracket"></i></button>
+    </div>
+</div>
+
+@code {
+    private string _search = string.Empty;
+    private int _alertCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.Changed += OnChanged;
+        Auth.Changed += OnChanged;
+        Events.DataChanged += OnDataChanged;
+        await LoadCountAsync();
+    }
+
+    private async Task LoadCountAsync()
+    {
+        try
+        {
+            _alertCount = (await Use<IAlertService>().Run(s => s.GetCountsAsync())).Total;
+        }
+        catch
+        {
+            _alertCount = 0;
+        }
+    }
+
+    private void OnSearchKey(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        var term = _search.Trim();
+        Nav.NavigateTo(string.IsNullOrEmpty(term) ? "inventory" : $"inventory?search={Uri.EscapeDataString(term)}");
+        _search = string.Empty;
+    }
+
+    private async Task LogoutAsync()
+    {
+        if (await Confirm.AskAsync("Log out?", "You will need your username and password to sign in again.",
+                "Log out", icon: "fa-right-from-bracket"))
+        {
+            Auth.SignOut();
+        }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void OnDataChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadCountAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        Page.Changed -= OnChanged;
+        Auth.Changed -= OnChanged;
+        Events.DataChanged -= OnDataChanged;
+    }
+}

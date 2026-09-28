@@ -1,0 +1,53 @@
+<Modal Title="@Details.Item.Name" Icon="fa-eye" Width="720" OnClose="OnClose">
+    <ChildContent>
+        <div class="detail-grid">
+            <div><label>Category</label><span>@Details.Item.CategoryName</span></div>
+            <div><label>Supplier</label><span>@(Details.Item.SupplierName ?? "—")</span></div>
+            <div><label>On Hand</label><span class="mono">@Formatting.Qty(Details.Item.Quantity) @Details.Item.Unit</span></div>
+            <div><label>Status</label><span><Badge Color="@UiText.BadgeClass(Details.Item.Status)">@Details.Item.Status.ToDisplay()</Badge></span></div>
+            <div><label>Low Stock Threshold</label><span class="mono">@Formatting.Qty(Details.Item.LowStockThreshold) @Details.Item.Unit</span></div>
+            <div><label>Unit Cost</label><span class="mono">@(Details.Item.UnitCost is { } c ? Formatting.Peso(c) : "—")</span></div>
+            <div><label>Value (at cost)</label><span class="mono">@Formatting.Peso(Details.Item.StockValue)</span></div>
+            <div><label>Last Updated</label><span>@Details.Item.LastUpdated.ToString("MMM d, yyyy h:mm tt")</span></div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Details.Item.Notes))
+        {
+            <div class="note-box"><i class="fas fa-note-sticky"></i> @Details.Item.Notes</div>
+        }
+
+        <div class="chart-title" style="margin:18px 0 8px">Recent transactions</div>
+        @if (Details.RecentTransactions.Count == 0)
+        {
+            <EmptyState Icon="fa-clock" Title="No transactions yet" />
+        }
+        else
+        {
+            <div class="tbl-wrap compact">
+                <table>
+                    <thead><tr><th>Date</th><th>Type</th><th class="num">Qty</th><th class="num">Balance</th><th>Supplier / Beneficiary</th><th>Reference</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in Details.RecentTransactions)
+                        {
+                            <tr>
+                                <td class="small">@t.Date.ToString("MMM d, yyyy h:mm tt")</td>
+                                <td><Badge Color="@UiText.BadgeClass(t.Type)">@t.Type.ToDisplay()</Badge></td>
+                                <td class="num mono">@UiText.SignedQty(t.QuantityChange)</td>
+                                <td class="num mono">@Formatting.Qty(t.BalanceAfter)</td>
+                                <td>@(t.Party ?? "—")</td>
+                                <td class="mono small">@t.ReferenceNo</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <button class="btn ghost" @onclick="OnClose">Close</button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter, EditorRequired] public InventoryItemDetailsDto Details { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+}

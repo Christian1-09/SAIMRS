@@ -1,0 +1,151 @@
+@inherits AppComponentBase
+
+@if (_profile is null)
+{
+    <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+}
+else
+{
+    <div class="account-head">
+        <Avatar PhotoUrl="@_profile.PhotoDataUrl" Initials="@_profile.Initials" Size="72" />
+        <div class="account-id">
+            <div class="account-name">@_profile.FullName</div>
+            <div class="account-sub">
+                Administrator
+                @if (_profile.LastLoginAt is { } last) { <span> · Last login: @last.ToString("MMM d, yyyy h:mm tt")</span> }
+            </div>
+        </div>
+        <div class="account-photo-actions">
+            <button class="btn primary" @onclick="BrowsePhotoAsync" disabled="@Busy"><i class="fas fa-cloud-arrow-up"></i> BROWSE FILES</button>
+            @if (_profile.PhotoDataUrl is not null)
+            {
+                <button class="btn ghost" @onclick="RemovePhotoAsync" disabled="@Busy"><i class="fas fa-trash"></i> Remove photo</button>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="form-error" style="max-width:720px"><i class="fas fa-circle-exclamation"></i><span>@_error</span></div>
+    }
+
+    <form class="account-form" @onsubmit="SaveAsync">
+        <div class="line-row">
+            <div class="line-field"><label>First Name</label><input type="text" @bind="_request.FirstName" maxlength="60" /></div>
+            <div class="line-field"><label>Last Name</label><input type="text" @bind="_request.LastName" maxlength="60" /></div>
+        </div>
+
+        <div class="line-row">
+            <div class="line-field"><label>Username</label><input type="text" @bind="_request.Username" maxlength="50" autocomplete="off" /></div>
+            <div class="line-field"></div>
+        </div>
+
+        <div class="line-row">
+            <div class="line-field">
+                <label>New Password</label>
+                <input type="password" @bind="_request.NewPassword" placeholder="Leave blank to keep current" autocomplete="new-password" />
+            </div>
+            <div class="line-field">
+                <label>Confirm New Password</label>
+                <input type="password" @bind="_request.ConfirmNewPassword" autocomplete="new-password" />
+            </div>
+        </div>
+
+        <div class="line-row">
+            <div class="line-field">
+                <label>Security Question</label>
+                <select @bind="_request.SecurityQuestion">
+                    @foreach (var q in _questions)
+                    {
+                        <option value="@q.Value">@q.Text</option>
+                    }
+                </select>
+            </div>
+            <div class="line-field">
+                <label>New Answer</label>
+                <input type="text" @bind="_request.SecurityAnswer" placeholder="Leave blank to keep current" autocomplete="off" />
+            </div>
+        </div>
+
+        <div class="line-row">
+            <div class="line-field">
+                <label>Current Password</label>
+                <input type="password" @bind="_request.CurrentPassword" autocomplete="current-password" />
+                <small>Required to change your username, password or security question.</small>
+            </div>
+            <div class="line-field"></div>
+        </div>
+
+        <button type="submit" class="btn primary" disabled="@Busy"><i class="fas fa-floppy-disk"></i> SAVE PROFILE</button>
+    </form>
+}
+
+@code {
+    private ProfileDto? _profile;
+    private UpdateProfileRequest _request = new();
+    private IReadOnlyList<SecurityQuestionOption> _questions = [];
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _questions = await Use<IAuthService>().Run(s => Task.FromResult(s.GetSecurityQuestionOptions()));
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _profile = await Use<IProfileService>().Run(s => s.GetAsync());
+        if (_profile is null) return;
+
+        _request = new UpdateProfileRequest
+        {
+            FirstName = _profile.FirstName,
+            LastName = _profile.LastName,
+            Username = _profile.Username,
+            SecurityQuestion = _profile.SecurityQuestion
+        };
+    }
+
+    private Task SaveAsync() => RunBusyAsync(async () =>
+    {
+        _error = null;
+        var result = await Use<IProfileService>().Run(s => s.UpdateAsync(_request));
+        if (result.IsFailure || result.Value is null)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        Auth.Update(result.Value);
+        Toast.Success("Profile saved.");
+        await LoadAsync();
+    });
+
+    private Task BrowsePhotoAsync() => RunBusyAsync(async () =>
+    {
+        var path = FileDialogs.PickOpenFile(FileDialogService.ImageFilter, "Choose a profile photo");
+        if (path is null) return;
+
+        var bytes = await File.ReadAllBytesAsync(path);
+        var result = await Use<IProfileService>().Run(s => s.UpdatePhotoAsync(bytes, Path.GetExtension(path)));
+        if (result.IsFailure || result.Value is null)
+        {
+            Toast.Error(result.Error ?? "The photo could not be saved.");
+            return;
+        }
+
+        Auth.Update(result.Value);
+        Toast.Success("Profile photo updated.");
+        await LoadAsync();
+    });
+
+    private Task RemovePhotoAsync() => RunBusyAsync(async () =>
+    {
+        var result = await Use<IProfileService>().Run(s => s.RemovePhotoAsync());
+        if (result.IsFailure || result.Value is null) { Toast.Error(result.Error ?? "Could not remove the photo."); return; }
+
+        Auth.Update(result.Value);
+        Toast.Success("Profile photo removed.");
+        await LoadAsync();
+    });
+}

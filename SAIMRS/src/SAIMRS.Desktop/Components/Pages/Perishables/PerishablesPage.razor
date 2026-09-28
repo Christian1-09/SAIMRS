@@ -1,0 +1,150 @@
+@page "/perishables"
+@inherits AppComponentBase
+
+<div class="sec-header">
+    <div>
+        <div class="sec-title">Perishable goods</div>
+        <div class="sec-sub">Batches tracked by expiry date. Alerts start @(_summary?.NearExpiryDays ?? 30) days before expiry (change this in Settings).</div>
+    </div>
+    <div class="sec-actions">
+        <button class="btn ghost" @onclick="() => ExportAsync(ExportFormat.Pdf)" disabled="@Busy"><i class="fas fa-file-pdf"></i> Expiry Report</button>
+        <button class="btn primary" @onclick="OpenAdd"><i class="fas fa-plus"></i> Add Batch</button>
+    </div>
+</div>
+
+@if (_summary is not null)
+{
+    <div class="alerts-row">
+        <div class="alert-card danger">
+            <i class="fas fa-skull-crossbones"></i>
+            <div><div class="alert-title">@_summary.Expired expired</div><div class="alert-desc">Remove or dispose of these batches</div></div>
+        </div>
+        <div class="alert-card danger">
+            <i class="fas fa-hourglass-half"></i>
+            <div><div class="alert-title">@_summary.Critical expiring within 7 days</div><div class="alert-desc">Immediate action required to avoid waste</div></div>
+        </div>
+        <div class="alert-card warn">
+            <i class="fas fa-calendar-xmark"></i>
+            <div><div class="alert-title">@_summary.NearExpiry expiring in 8–@_summary.NearExpiryDays days</div><div class="alert-desc">Plan distribution or disposal accordingly</div></div>
+        </div>
+    </div>
+}
+
+<div class="tbl-wrap">
+    <table>
+        <thead>
+            <tr><th>Item Name</th><th>Batch No.</th><th class="num">Quantity</th><th>Plant/Harvest Date</th><th>Expiry Date</th><th>Days Left</th><th>Status</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+            @if (_list is null)
+            {
+                <tr><td colspan="8"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div></td></tr>
+            }
+            else if (_list.Count == 0)
+            {
+                <tr><td colspan="8"><EmptyState Icon="fa-calendar-xmark" Title="No perishable batches" Message="Add a batch to start tracking expiry dates." /></td></tr>
+            }
+            else
+            {
+                foreach (var p in _list)
+                {
+                    <tr>
+                        <td><b class="strong">@p.ItemName</b></td>
+                        <td class="mono small">@p.BatchNo</td>
+                        <td class="num mono">@Formatting.Qty(p.Quantity) @p.Unit</td>
+                        <td class="muted small">@(p.PlantOrHarvestDate?.ToString("yyyy-MM-dd") ?? "—")</td>
+                        <td class="mono small">@p.ExpiryDate.ToString("yyyy-MM-dd")</td>
+                        <td><Badge Color="@UiText.BadgeClass(p.Status)">@Formatting.DaysLeftText(p.DaysLeft)</Badge></td>
+                        <td><Badge Color="@UiText.BadgeClass(p.Status)">@p.Status.ToDisplay()</Badge></td>
+                        <td>
+                            <div class="tbl-actions">
+                                <button class="act-btn edit" title="Edit" @onclick="() => OpenEdit(p)"><i class="fas fa-pen"></i></button>
+                                <button class="act-btn del" title="Delete" @onclick="() => DeleteAsync(p)"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_editing is not null)
+{
+    <PerishableFormModal Request="_editing" Busy="Busy" Error="@_formError" OnSave="SaveAsync" OnCancel="CloseForm" />
+}
+
+@code {
+    private List<PerishableDto>? _list;
+    private PerishableSummaryDto? _summary;
+    private SavePerishableRequest? _editing;
+    private string? _formError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.SetTitle("Perishable Goods");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _list = await Use<IPerishableService>().Run(s => s.ListAsync());
+        _summary = await Use<IPerishableService>().Run(s => s.GetSummaryAsync());
+    }
+
+    private void OpenAdd()
+    {
+        _formError = null;
+        _editing = new SavePerishableRequest { PlantOrHarvestDate = DateOnly.FromDateTime(DateTime.Today) };
+    }
+
+    private void OpenEdit(PerishableDto p)
+    {
+        _formError = null;
+        _editing = new SavePerishableRequest
+        {
+            Id = p.Id,
+            ItemName = p.ItemName,
+            BatchNo = p.BatchNo,
+            Quantity = p.Quantity,
+            Unit = p.Unit,
+            PlantOrHarvestDate = p.PlantOrHarvestDate,
+            ExpiryDate = p.ExpiryDate,
+            Notes = p.Notes
+        };
+    }
+
+    private void CloseForm()
+    {
+        _editing = null;
+        _formError = null;
+    }
+
+    private Task SaveAsync() => RunBusyAsync(async () =>
+    {
+        if (_editing is null) return;
+        var result = await Use<IPerishableService>().Run(s => s.SaveAsync(_editing));
+        if (result.IsFailure) { _formError = result.Error; return; }
+
+        Toast.Success(_editing.Id is null ? $"Batch {_editing.BatchNo.Trim()} added." : $"Batch {_editing.BatchNo.Trim()} updated.");
+        CloseForm();
+        Events.NotifyDataChanged();
+        await LoadAsync();
+    });
+
+    private async Task DeleteAsync(PerishableDto p)
+    {
+        if (!await Confirm.AskAsync("Delete this batch?",
+                $"Batch {p.BatchNo} of {p.ItemName} will be permanently removed.", "Delete", isDanger: true, icon: "fa-trash"))
+            return;
+
+        var result = await Use<IPerishableService>().Run(s => s.DeleteAsync(p.Id));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+        Toast.Success($"Batch {p.BatchNo} deleted.");
+        Events.NotifyDataChanged();
+        await LoadAsync();
+    }
+
+    private Task ExportAsync(ExportFormat format) => RunBusyAsync(() =>
+        ExportReportAsync(new ReportRequest { Type = ReportType.Expiry }, format));
+}

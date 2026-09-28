@@ -1,0 +1,42 @@
+@* Category share donut drawn with SVG stroke segments. *@
+@if (Data.Count == 0)
+{
+    <EmptyState Icon="fa-chart-pie" Title="No items yet" />
+}
+else
+{
+    <div class="donut-wrap">
+        <svg width="120" height="120" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="@Radius" fill="none" stroke="#e5e7eb" stroke-width="14" />
+            @{ double offset = 0; }
+            @for (var i = 0; i < Data.Count; i++)
+            {
+                var length = Circumference * Data[i].Percent / 100.0;
+                <circle cx="50" cy="50" r="@Radius" fill="none" stroke="@Palette[i % Palette.Length]" stroke-width="14"
+                        stroke-dasharray="@F(length) @F(Circumference - length)"
+                        stroke-dashoffset="@F(-offset)"
+                        transform="rotate(-90 50 50)" />
+                offset += length;
+            }
+        </svg>
+        <div class="donut-legend">
+            @for (var i = 0; i < Data.Count; i++)
+            {
+                <div class="legend-item">
+                    <div class="legend-dot" style="background:@Palette[i % Palette.Length]"></div>
+                    @Data[i].Name <b style="margin-left:auto">@Data[i].Percent.ToString("0.#")%</b>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<CategoryShareDto> Data { get; set; } = [];
+
+    private const double Radius = 38;
+    private static readonly double Circumference = 2 * Math.PI * Radius;
+    private static readonly string[] Palette = ["#2e8b57", "#f59e0b", "#3b82f6", "#ef4444", "#8b5cf6", "#14b8a6", "#6b7280"];
+
+    private static string F(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+}

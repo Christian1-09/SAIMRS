@@ -1,0 +1,35 @@
+@inherits LayoutComponentBase
+
+@* Split screen used by Setup, Login and Forgot Password: green brand panel + white form. *@
+<div class="auth-shell">
+    <aside class="auth-brand">
+        <div class="auth-brand-inner">
+            <div class="auth-logo-card">
+                <BrandLogo Large="true" />
+                <div class="auth-logo-name">SAIMRS</div>
+                <div class="auth-logo-tag">Agricultural Inventory Management</div>
+            </div>
+
+            <h1>Manage farm supplies and harvests, all in one place.</h1>
+            <p>
+                A focused workspace for the Provincial Agri-Industrial Center — track seeds,
+                fertilizers, pesticides and harvests, distribute to beneficiaries, and keep
+                every stock movement on record.
+            </p>
+
+            <ul class="auth-features">
+                <li><span><i class="fas fa-boxes-stacked"></i></span>Track stock levels and low-stock alerts</li>
+                <li><span><i class="fas fa-hand-holding-heart"></i></span>Record distributions to beneficiaries</li>
+                <li><span><i class="fas fa-calendar-xmark"></i></span>Monitor perishable goods before they expire</li>
+                <li><span><i class="fas fa-chart-bar"></i></span>Generate PDF and Excel reports instantly</li>
+            </ul>
+        </div>
+        <div class="auth-brand-footer">© @DateTime.Now.Year SAIMRS — PAIC Upper Irasan · Offline Desktop Edition</div>
+    </aside>
+
+    <main class="auth-form-side">
+        <div class="auth-card">
+            @Body
+        </div>
+    </main>
+</div>

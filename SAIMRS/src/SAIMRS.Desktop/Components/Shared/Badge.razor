@@ -1,0 +1,7 @@
+<span class="badge @Color">@ChildContent</span>
+
+@code {
+    /// <summary>green, amber, red, blue or gray.</summary>
+    [Parameter] public string Color { get; set; } = "gray";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,196 @@
+@page "/transactions"
+@inherits AppComponentBase
+
+<div class="sec-header">
+    <div>
+        <div class="sec-title">Transaction log</div>
+        <div class="sec-sub">Every stock movement is recorded here and cannot be edited, keeping a reliable audit trail.</div>
+    </div>
+    <div class="sec-actions">
+        <button class="btn ghost" @onclick="() => ExportAsync(ExportFormat.Pdf)" disabled="@Busy"><i class="fas fa-file-pdf"></i> PDF</button>
+        <button class="btn ghost" @onclick="() => ExportAsync(ExportFormat.Excel)" disabled="@Busy"><i class="fas fa-file-excel"></i> Excel</button>
+        <button class="btn primary" @onclick="OpenFormAsync"><i class="fas fa-plus"></i> Log Transaction</button>
+    </div>
+</div>
+
+<div class="filters">
+    <span class="filter-label">Filter:</span>
+    <select @bind="TypeFilter">
+        <option value="">All Types</option>
+        <option value="@TransactionType.In">Stock In</option>
+        <option value="@TransactionType.Out">Stock Out</option>
+        <option value="@TransactionType.Adjust">Adjustment</option>
+    </select>
+    <span class="filter-label">From</span>
+    <input type="date" @bind="FromFilter" />
+    <span class="filter-label">To</span>
+    <input type="date" @bind="ToFilter" />
+    <input type="text" placeholder="Search item, reference, beneficiary…" style="width:260px" @bind="SearchText" @bind:event="oninput" />
+    @if (_filter.Type is not null || _filter.From is not null || _filter.To is not null || !string.IsNullOrEmpty(_filter.Search))
+    {
+        <button class="btn ghost sm" @onclick="ClearFiltersAsync"><i class="fas fa-xmark"></i> Clear</button>
+    }
+</div>
+
+<div class="tbl-wrap">
+    <table>
+        <thead>
+            <tr><th>Txn ID</th><th>Type</th><th>Item</th><th class="num">Qty</th><th class="num">Balance</th><th>Supplier / Beneficiary</th><th>Reference</th><th>Performed By</th><th>Date &amp; Time</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+            @if (_page is null)
+            {
+                <tr><td colspan="10"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div></td></tr>
+            }
+            else if (_page.Items.Count == 0)
+            {
+                <tr><td colspan="10"><EmptyState Icon="fa-arrow-right-arrow-left" Title="No transactions found" Message="Log a Stock IN, OUT or Adjustment to get started." /></td></tr>
+            }
+            else
+            {
+                foreach (var t in _page.Items)
+                {
+                    <tr>
+                        <td class="mono small muted">@t.Code</td>
+                        <td><Badge Color="@UiText.BadgeClass(t.Type)">@t.Type.ToDisplay()</Badge></td>
+                        <td>@t.ItemName</td>
+                        <td class="num mono strong">@UiText.SignedQty(t.QuantityChange) <span class="muted small">@t.Unit</span></td>
+                        <td class="num mono">@Formatting.Qty(t.BalanceAfter)</td>
+                        <td>@(t.Party ?? "—")</td>
+                        <td class="mono small">@t.ReferenceNo</td>
+                        <td class="small">@t.PerformedBy</td>
+                        <td class="muted small">@t.Date.ToString("yyyy-MM-dd h:mm tt")</td>
+                        <td class="small muted">@(t.Notes ?? "—")</td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_page is not null)
+{
+    <Pagination Page="_page.Page" TotalPages="_page.TotalPages" TotalCount="_page.TotalCount" PageChanged="GoToPageAsync" />
+}
+
+@if (_request is not null)
+{
+    <TransactionFormModal Request="_request" Items="_items" Suppliers="_suppliers" Beneficiaries="_beneficiaries"
+                          Busy="Busy" Error="@_formError" OnSave="SaveAsync" OnCancel="CloseForm" />
+}
+
+@code {
+    private TransactionFilter _filter = new();
+    private PagedResult<TransactionDto>? _page;
+    private string _search = string.Empty;
+    private CancellationTokenSource? _searchDelay;
+
+    private LogTransactionRequest? _request;
+    private string? _formError;
+    private List<ItemLookupDto> _items = [];
+    private List<LookupItem> _suppliers = [];
+    private List<LookupItem> _beneficiaries = [];
+
+    private TransactionType? TypeFilter
+    {
+        get => _filter.Type;
+        set { _filter = _filter with { Type = value, Page = 1 }; _ = LoadAsync(); }
+    }
+
+    private DateOnly? FromFilter
+    {
+        get => _filter.From;
+        set { _filter = _filter with { From = value, Page = 1 }; _ = LoadAsync(); }
+    }
+
+    private DateOnly? ToFilter
+    {
+        get => _filter.To;
+        set { _filter = _filter with { To = value, Page = 1 }; _ = LoadAsync(); }
+    }
+
+    private string SearchText
+    {
+        get => _search;
+        set { _search = value; _ = DebouncedSearchAsync(); }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.SetTitle("Transaction Log");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _page = await Use<ITransactionService>().Run(s => s.SearchAsync(_filter));
+        StateHasChanged();
+    }
+
+    private async Task DebouncedSearchAsync()
+    {
+        _searchDelay?.Cancel();
+        _searchDelay = new CancellationTokenSource();
+        var token = _searchDelay.Token;
+        try
+        {
+            await Task.Delay(300, token);
+            _filter = _filter with { Search = _search, Page = 1 };
+            await LoadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _search = string.Empty;
+        _filter = new TransactionFilter();
+        await LoadAsync();
+    }
+
+    private async Task GoToPageAsync(int page)
+    {
+        _filter = _filter with { Page = page };
+        await LoadAsync();
+    }
+
+    private async Task OpenFormAsync()
+    {
+        _items = await Use<IInventoryService>().Run(s => s.GetLookupAsync());
+        _suppliers = await Use<ISupplierService>().Run(s => s.GetLookupAsync());
+        _beneficiaries = await Use<IBeneficiaryService>().Run(s => s.GetLookupAsync());
+        _formError = null;
+        _request = new LogTransactionRequest();
+    }
+
+    private void CloseForm()
+    {
+        _request = null;
+        _formError = null;
+    }
+
+    private Task SaveAsync() => RunBusyAsync(async () =>
+    {
+        if (_request is null) return;
+        var result = await Use<ITransactionService>().Run(s => s.LogAsync(_request));
+        if (result.IsFailure || result.Value is null)
+        {
+            _formError = result.Error;
+            return;
+        }
+
+        var t = result.Value;
+        Toast.Success($"{t.Type.ToDisplay()} logged: {UiText.SignedQty(t.QuantityChange)} {t.Unit} {t.ItemName}. New balance: {Formatting.Qty(t.BalanceAfter)} {t.Unit}.");
+        if (t.BalanceAfter <= 0)
+            Toast.Warning($"{t.ItemName} is now out of stock.");
+
+        CloseForm();
+        Events.NotifyDataChanged();
+        await LoadAsync();
+    });
+
+    private Task ExportAsync(ExportFormat format) => RunBusyAsync(() =>
+        ExportReportAsync(new ReportRequest { Type = ReportType.StockMovement, From = _filter.From, To = _filter.To }, format));
+}

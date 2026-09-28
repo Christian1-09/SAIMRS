@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SAIMRS.Domain/SAIMRS.Domain.csproj" />
+    <Project Path="src/SAIMRS.Application/SAIMRS.Application.csproj" />
+    <Project Path="src/SAIMRS.Infrastructure/SAIMRS.Infrastructure.csproj" />
+    <Project Path="src/SAIMRS.Desktop/SAIMRS.Desktop.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SAIMRS.Domain.Tests/SAIMRS.Domain.Tests.csproj" />
+  </Folder>
+</Solution>

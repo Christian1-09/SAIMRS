@@ -1,0 +1,167 @@
+<Modal Title="Log Transaction" Icon="fa-arrow-right-arrow-left" Width="600" Error="@Error" OnClose="OnCancel">
+    <ChildContent>
+        <form id="txn-form" @onsubmit="OnSave">
+            <div class="type-switch">
+                <button type="button" class="@(Request.Type == TransactionType.In ? "on in" : "")" @onclick="() => SetType(TransactionType.In)">
+                    <i class="fas fa-arrow-down"></i> Stock IN <small>Received</small>
+                </button>
+                <button type="button" class="@(Request.Type == TransactionType.Out ? "on out" : "")" @onclick="() => SetType(TransactionType.Out)">
+                    <i class="fas fa-arrow-up"></i> Stock OUT <small>Issued to beneficiary</small>
+                </button>
+                <button type="button" class="@(Request.Type == TransactionType.Adjust ? "on adj" : "")" @onclick="() => SetType(TransactionType.Adjust)">
+                    <i class="fas fa-sliders"></i> Adjustment <small>Physical count</small>
+                </button>
+            </div>
+
+            <div class="form-row full">
+                <div class="form-group">
+                    <label>Item *</label>
+                    <select @bind="Request.ItemId" @bind:after="OnItemChanged">
+                        <option value="">— Select item —</option>
+                        @foreach (var i in Items)
+                        {
+                            <option value="@i.Id">@i.Name (@Formatting.Qty(i.Quantity) @i.Unit on hand)</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            @if (Selected is { } selectedItem)
+            {
+                <div class="onhand-box">
+                    <span><i class="fas fa-box"></i> On hand: <b>@Formatting.Qty(selectedItem.Quantity) @selectedItem.Unit</b></span>
+                    <span>Unit cost: <b>@(selectedItem.UnitCost is { } currentCost ? Formatting.Peso(currentCost) : "—")</b></span>
+                </div>
+            }
+
+            @switch (Request.Type)
+            {
+                case TransactionType.In:
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Quantity Received *</label>
+                            <input type="number" min="0" step="any" @bind="Request.Quantity" />
+                        </div>
+                        <div class="form-group">
+                            <label>Unit Cost (₱)</label>
+                            <input type="number" min="0" step="0.01" @bind="Request.UnitCost" placeholder="Optional" />
+                            <small>Updates the item's average cost.</small>
+                        </div>
+                    </div>
+                    <div class="form-row full">
+                        <div class="form-group">
+                            <label>Supplier</label>
+                            <select @bind="Request.SupplierId">
+                                <option value="">— None (e.g. harvest or donation) —</option>
+                                @foreach (var supplier in Suppliers)
+                                {
+                                    <option value="@supplier.Id">@supplier.Name</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    break;
+
+                case TransactionType.Out:
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Quantity Issued *</label>
+                            <input type="number" min="0" step="any" @bind="Request.Quantity" />
+                            @if (Selected is { } onHand && Request.Quantity > onHand.Quantity)
+                            {
+                                <small class="text-danger">More than the @Formatting.Qty(onHand.Quantity) @onHand.Unit on hand.</small>
+                            }
+                        </div>
+                        <div class="form-group">
+                            <label>Beneficiary *</label>
+                            <select @bind="Request.BeneficiaryId">
+                                <option value="">— Select beneficiary —</option>
+                                @foreach (var b in Beneficiaries)
+                                {
+                                    <option value="@b.Id">@b.Name</option>
+                                }
+                            </select>
+                            @if (Beneficiaries.Count == 0)
+                            {
+                                <small class="text-danger">No active beneficiaries. Register one under Beneficiaries first.</small>
+                            }
+                        </div>
+                    </div>
+                    break;
+
+                default:
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Counted Quantity *</label>
+                            <input type="number" min="0" step="any" @bind="Request.CountedQuantity" />
+                            <small>What you actually counted during the physical count.</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Difference</label>
+                            <input type="text" disabled value="@AdjustmentPreview" />
+                        </div>
+                    </div>
+                    break;
+            }
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Reference No.</label>
+                    <input type="text" @bind="Request.ReferenceNo" placeholder="Auto-generated if blank" maxlength="50" />
+                </div>
+                <div class="form-group">
+                    <label>@(Request.Type == TransactionType.Adjust ? "Reason *" : "Notes")</label>
+                    <input type="text" @bind="Request.Notes" maxlength="500"
+                           placeholder="@(Request.Type == TransactionType.Adjust ? "e.g. Damaged bags removed" : "Optional")" />
+                </div>
+            </div>
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="btn ghost" @onclick="OnCancel">Cancel</button>
+        <button type="submit" form="txn-form" class="btn primary" disabled="@Busy"><i class="fas fa-check"></i> Log Transaction</button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter, EditorRequired] public LogTransactionRequest Request { get; set; } = default!;
+    [Parameter] public List<ItemLookupDto> Items { get; set; } = [];
+    [Parameter] public List<LookupItem> Suppliers { get; set; } = [];
+    [Parameter] public List<LookupItem> Beneficiaries { get; set; } = [];
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private ItemLookupDto? Selected => Items.FirstOrDefault(i => i.Id == Request.ItemId);
+
+    private string AdjustmentPreview
+    {
+        get
+        {
+            if (Selected is not { } item || Request.CountedQuantity is not { } counted)
+                return "—";
+            var diff = counted - item.Quantity;
+            return diff == 0 ? "No change" : $"{UiText.SignedQty(diff)} {item.Unit}";
+        }
+    }
+
+    private void SetType(TransactionType type)
+    {
+        Request.Type = type;
+        Request.Quantity = null;
+        Request.CountedQuantity = null;
+        Request.SupplierId = null;
+        Request.BeneficiaryId = null;
+        OnItemChanged();
+    }
+
+    private void OnItemChanged()
+    {
+        // Pre-fill the cost for Stock IN with the item's current cost.
+        if (Request.Type == TransactionType.In && Selected is { UnitCost: { } cost })
+            Request.UnitCost = cost;
+        else if (Request.Type != TransactionType.In)
+            Request.UnitCost = null;
+    }
+}

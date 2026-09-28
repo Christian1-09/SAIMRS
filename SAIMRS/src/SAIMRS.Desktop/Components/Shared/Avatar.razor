@@ -1,0 +1,14 @@
+@if (!string.IsNullOrEmpty(PhotoUrl))
+{
+    <img class="avatar-img" src="@PhotoUrl" alt="@Initials" style="width:@(Size)px;height:@(Size)px" />
+}
+else
+{
+    <div class="sb-avatar" style="width:@(Size)px;height:@(Size)px;font-size:@((int)(Size * 0.36))px">@Initials</div>
+}
+
+@code {
+    [Parameter] public string? PhotoUrl { get; set; }
+    [Parameter] public string Initials { get; set; } = "";
+    [Parameter] public int Size { get; set; } = 34;
+}

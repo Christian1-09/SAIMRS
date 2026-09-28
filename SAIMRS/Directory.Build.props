@@ -1,0 +1,11 @@
+<Project>
+  <!-- Shared settings for every project in the solution -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <Company>Provincial Agri-Industrial Center (PAIC)</Company>
+    <Product>SAIMRS - Agricultural Inventory Management System</Product>
+  </PropertyGroup>
+</Project>

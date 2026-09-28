@@ -1,0 +1,98 @@
+@inherits AppComponentBase
+@implements IDisposable
+
+<div id="sidebar">
+    <div class="sb-logo">
+        <div class="sb-logo-main">
+            <BrandLogo />
+            <div><div class="sb-title">SAIMRS</div><div class="sb-sub">PAIC Inventory</div></div>
+        </div>
+    </div>
+
+    <nav class="sb-nav">
+        <div class="sb-section">Main</div>
+        <NavLink class="sb-item" href="dashboard" ActiveClass="active"><i class="fas fa-gauge-high"></i>Dashboard</NavLink>
+        <NavLink class="sb-item" href="inventory" ActiveClass="active">
+            <i class="fas fa-boxes-stacked"></i>Inventory
+            @if (_counts.LowStock > 0) { <span class="sb-badge" title="Low or out of stock">@_counts.LowStock</span> }
+        </NavLink>
+        <NavLink class="sb-item" href="transactions" ActiveClass="active"><i class="fas fa-arrow-right-arrow-left"></i>Transactions</NavLink>
+
+        <div class="sb-section">Management</div>
+        <NavLink class="sb-item" href="perishables" ActiveClass="active">
+            <i class="fas fa-calendar-xmark"></i>Perishable Goods
+            @if (_counts.Expiring > 0) { <span class="sb-badge" title="Expired or near expiry">@_counts.Expiring</span> }
+        </NavLink>
+        <NavLink class="sb-item" href="categories" ActiveClass="active"><i class="fas fa-tags"></i>Categories</NavLink>
+        <NavLink class="sb-item" href="suppliers" ActiveClass="active"><i class="fas fa-truck"></i>Suppliers</NavLink>
+        <NavLink class="sb-item" href="beneficiaries" ActiveClass="active"><i class="fas fa-user-group"></i>Beneficiaries</NavLink>
+
+        <div class="sb-section">Output</div>
+        <NavLink class="sb-item" href="reports" ActiveClass="active"><i class="fas fa-chart-bar"></i>Reports</NavLink>
+        <NavLink class="sb-item" href="alerts" ActiveClass="active">
+            <i class="fas fa-bell"></i>Alerts
+            @if (_counts.Total > 0) { <span class="sb-badge">@_counts.Total</span> }
+        </NavLink>
+
+        <div class="sb-section">System</div>
+        <NavLink class="sb-item" href="settings" ActiveClass="active"><i class="fas fa-gear"></i>Settings</NavLink>
+    </nav>
+
+    @if (Auth.Session is { } session)
+    {
+        <div class="sb-user">
+            <Avatar PhotoUrl="@session.PhotoDataUrl" Initials="@session.Initials" />
+            <div class="sb-user-text">
+                <div class="sb-uname">@session.FullName</div>
+                <div class="sb-urole">Administrator</div>
+            </div>
+            <button class="icon-btn" title="Log out" @onclick="LogoutAsync"><i class="fas fa-right-from-bracket"></i></button>
+        </div>
+    }
+</div>
+
+@code {
+    private AlertCountsDto _counts = new(0, 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.DataChanged += OnDataChanged;
+        Auth.Changed += OnAuthChanged;
+        await LoadCountsAsync();
+    }
+
+    private async Task LoadCountsAsync()
+    {
+        try
+        {
+            _counts = await Use<IAlertService>().Run(s => s.GetCountsAsync());
+        }
+        catch
+        {
+            // Badges are informational; never break the layout because of them.
+        }
+    }
+
+    private void OnDataChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadCountsAsync();
+        StateHasChanged();
+    });
+
+    private void OnAuthChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task LogoutAsync()
+    {
+        if (await Confirm.AskAsync("Log out?", "You will need your username and password to sign in again.",
+                "Log out", icon: "fa-right-from-bracket"))
+        {
+            Auth.SignOut();
+        }
+    }
+
+    public void Dispose()
+    {
+        Events.DataChanged -= OnDataChanged;
+        Auth.Changed -= OnAuthChanged;
+    }
+}

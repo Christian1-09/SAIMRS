@@ -1,0 +1,103 @@
+<Modal Title="@(IsNew ? "Add Inventory Item" : "Edit Inventory Item")" Icon="fa-boxes-stacked" Error="@Error" OnClose="OnCancel">
+    <ChildContent>
+        <form id="item-form" @onsubmit="OnSave">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Item Name *</label>
+                    <input type="text" @bind="Request.Name" placeholder="e.g. Rice Seeds (NSIC Rc222)" maxlength="150" />
+                </div>
+                <div class="form-group">
+                    <label>Category *</label>
+                    <select @bind="Request.CategoryId">
+                        <option value="">— Select category —</option>
+                        @foreach (var c in Categories)
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                @if (IsNew)
+                {
+                    <div class="form-group">
+                        <label>Opening Quantity</label>
+                        <input type="number" min="0" step="any" @bind="Request.InitialQuantity" />
+                        <small>Recorded as the first Stock IN (opening balance).</small>
+                    </div>
+                }
+                else
+                {
+                    <div class="form-group">
+                        <label>Current Quantity</label>
+                        <input type="text" value="@Formatting.Qty(Request.InitialQuantity)" disabled />
+                        <small>Use Transactions (IN / OUT / Adjust) to change stock.</small>
+                    </div>
+                }
+                <div class="form-group">
+                    <label>Unit *</label>
+                    <select @bind="Request.Unit">
+                        @foreach (var u in UnitOptions)
+                        {
+                            <option value="@u">@u</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Low Stock Threshold</label>
+                    <input type="number" min="0" step="any" @bind="Request.LowStockThreshold" />
+                    <small>An alert appears when stock is at or below this number.</small>
+                </div>
+                <div class="form-group">
+                    <label>Unit Cost (₱)</label>
+                    <input type="number" min="0" step="0.01" @bind="Request.UnitCost" placeholder="Optional" />
+                    <small>Acquisition cost per unit. Leave blank if unknown (e.g. harvests).</small>
+                </div>
+            </div>
+
+            <div class="form-row full">
+                <div class="form-group">
+                    <label>Supplier</label>
+                    <select @bind="Request.SupplierId">
+                        <option value="">— None —</option>
+                        @foreach (var s in Suppliers)
+                        {
+                            <option value="@s.Id">@s.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row full">
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea @bind="Request.Notes" placeholder="Optional notes…" maxlength="500"></textarea>
+                </div>
+            </div>
+        </form>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="btn ghost" @onclick="OnCancel">Cancel</button>
+        <button type="submit" form="item-form" class="btn primary" disabled="@Busy"><i class="fas fa-floppy-disk"></i> Save Item</button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter, EditorRequired] public SaveItemRequest Request { get; set; } = default!;
+    [Parameter] public List<CategoryDto> Categories { get; set; } = [];
+    [Parameter] public List<LookupItem> Suppliers { get; set; } = [];
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool IsNew => Request.Id is null;
+
+    // Keep an existing, non-standard unit selectable when editing.
+    private IEnumerable<string> UnitOptions =>
+        Units.All.Contains(Request.Unit) ? Units.All : Units.All.Prepend(Request.Unit);
+}

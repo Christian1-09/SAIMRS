@@ -1,0 +1,244 @@
+@page "/beneficiaries"
+@inherits AppComponentBase
+
+@if (_stats is not null)
+{
+    <div class="stats-grid three">
+        <StatCard Label="Total Beneficiaries" Value="@_stats.Total.ToString()" Icon="fa-user-group" IconClass="g-icon"><Sub>Registered farmers</Sub></StatCard>
+        <StatCard Label="Active" Value="@_stats.Active.ToString()" Icon="fa-circle-check" IconClass="b-icon"><Sub>Can receive items</Sub></StatCard>
+        <StatCard Label="Barangays Covered" Value="@_stats.BarangaysCovered.ToString()" Icon="fa-map-location-dot" IconClass="a-icon"><Sub>Distinct locations</Sub></StatCard>
+    </div>
+}
+
+<div class="sec-header">
+    <div>
+        <div class="sec-title">@(_filter.ShowArchived ? "Archived beneficiaries" : "Beneficiaries")</div>
+        <div class="sec-sub">Only active beneficiaries can receive items through Stock OUT.</div>
+    </div>
+    <div class="sec-actions">
+        <button class="btn ghost" @onclick="() => ExportAsync(ExportFormat.Pdf)" disabled="@Busy"><i class="fas fa-file-pdf"></i> PDF</button>
+        <button class="btn ghost" @onclick="() => ExportAsync(ExportFormat.Excel)" disabled="@Busy"><i class="fas fa-file-excel"></i> Excel</button>
+        @if (!_filter.ShowArchived)
+        {
+            <button class="btn primary" @onclick="OpenAdd"><i class="fas fa-plus"></i> Add Beneficiary</button>
+        }
+    </div>
+</div>
+
+<div class="filters">
+    <span class="filter-label">Filter:</span>
+    <select @bind="StatusFilter">
+        <option value="">All Status</option>
+        <option value="@BeneficiaryStatus.Active">Active</option>
+        <option value="@BeneficiaryStatus.Inactive">Inactive</option>
+    </select>
+    <select @bind="BarangayFilter">
+        <option value="">All Barangays</option>
+        @foreach (var b in _barangays)
+        {
+            <option value="@b">@b</option>
+        }
+    </select>
+    <select @bind="CropFilter">
+        <option value="">All Crop Types</option>
+        @foreach (var crop in Enum.GetValues<CropType>())
+        {
+            <option value="@crop">@crop</option>
+        }
+    </select>
+    <input type="text" placeholder="Search name or ID…" style="width:200px" @bind="SearchText" @bind:event="oninput" />
+    <label class="toggle-label"><input type="checkbox" checked="@_filter.ShowArchived" @onchange="ToggleArchivedAsync" /> Show archived</label>
+</div>
+
+<div class="tbl-wrap">
+    <table>
+        <thead><tr><th>Beneficiary ID</th><th>Full Name</th><th>Barangay</th><th>Contact No.</th><th>Farm Size</th><th>Crop Type</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+            @if (_list is null)
+            {
+                <tr><td colspan="8"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div></td></tr>
+            }
+            else if (_list.Count == 0)
+            {
+                <tr><td colspan="8"><EmptyState Icon="fa-user-group" Title="No beneficiaries found" Message="Try adjusting your filters or search." /></td></tr>
+            }
+            else
+            {
+                foreach (var b in _list)
+                {
+                    <tr class="@(b.IsArchived ? "archived-row" : "")">
+                        <td class="mono small">@b.Code</td>
+                        <td><b class="strong">@b.FullName</b></td>
+                        <td>@b.Barangay</td>
+                        <td class="mono small">@(b.ContactNumber ?? "—")</td>
+                        <td class="mono small">@(b.FarmSizeHectares > 0 ? $"{Formatting.Qty(b.FarmSizeHectares)} ha" : "—")</td>
+                        <td><Badge Color="blue">@b.CropType</Badge></td>
+                        <td><Badge Color="@UiText.BadgeClass(b.Status)">@b.Status</Badge></td>
+                        <td>
+                            <div class="tbl-actions">
+                                <button class="act-btn" title="View profile" @onclick="() => ViewAsync(b.Id)"><i class="fas fa-eye"></i></button>
+                                @if (b.IsArchived)
+                                {
+                                    <button class="act-btn edit" title="Restore" @onclick="() => RestoreAsync(b)"><i class="fas fa-rotate-left"></i></button>
+                                }
+                                else
+                                {
+                                    <button class="act-btn edit" title="Edit" @onclick="() => OpenEdit(b)"><i class="fas fa-pen"></i></button>
+                                    <button class="act-btn del" title="Archive" @onclick="() => ArchiveAsync(b)"><i class="fas fa-box-archive"></i></button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_editing is not null)
+{
+    <BeneficiaryFormModal Request="_editing" Barangays="_barangays" Busy="Busy" Error="@_formError" OnSave="SaveAsync" OnCancel="CloseForm" />
+}
+
+@if (_profile is not null)
+{
+    <BeneficiaryProfileModal Profile="_profile" OnClose="() => _profile = null" />
+}
+
+@code {
+    private BeneficiaryFilter _filter = new();
+    private List<BeneficiaryDto>? _list;
+    private BeneficiaryStatsDto? _stats;
+    private List<string> _barangays = [];
+    private string _search = string.Empty;
+    private CancellationTokenSource? _searchDelay;
+
+    private SaveBeneficiaryRequest? _editing;
+    private string? _formError;
+    private BeneficiaryProfileDto? _profile;
+
+    private BeneficiaryStatus? StatusFilter
+    {
+        get => _filter.Status;
+        set { _filter = _filter with { Status = value }; _ = LoadAsync(); }
+    }
+
+    private string? BarangayFilter
+    {
+        get => _filter.Barangay;
+        set { _filter = _filter with { Barangay = string.IsNullOrEmpty(value) ? null : value }; _ = LoadAsync(); }
+    }
+
+    private CropType? CropFilter
+    {
+        get => _filter.CropType;
+        set { _filter = _filter with { CropType = value }; _ = LoadAsync(); }
+    }
+
+    private string SearchText
+    {
+        get => _search;
+        set { _search = value; _ = DebouncedSearchAsync(); }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.SetTitle("Beneficiary Information");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _list = await Use<IBeneficiaryService>().Run(s => s.ListAsync(_filter));
+        _stats = await Use<IBeneficiaryService>().Run(s => s.GetStatsAsync());
+        _barangays = await Use<IBeneficiaryService>().Run(s => s.GetBarangaysAsync());
+        StateHasChanged();
+    }
+
+    private async Task DebouncedSearchAsync()
+    {
+        _searchDelay?.Cancel();
+        _searchDelay = new CancellationTokenSource();
+        var token = _searchDelay.Token;
+        try
+        {
+            await Task.Delay(300, token);
+            _filter = _filter with { Search = _search };
+            await LoadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private async Task ToggleArchivedAsync(ChangeEventArgs e)
+    {
+        _filter = _filter with { ShowArchived = e.Value is true };
+        await LoadAsync();
+    }
+
+    private void OpenAdd()
+    {
+        _formError = null;
+        _editing = new SaveBeneficiaryRequest();
+    }
+
+    private void OpenEdit(BeneficiaryDto b)
+    {
+        _formError = null;
+        _editing = new SaveBeneficiaryRequest
+        {
+            Id = b.Id,
+            FullName = b.FullName,
+            Barangay = b.Barangay,
+            ContactNumber = b.ContactNumber,
+            FarmSizeHectares = b.FarmSizeHectares,
+            CropType = b.CropType,
+            Status = b.Status
+        };
+    }
+
+    private void CloseForm()
+    {
+        _editing = null;
+        _formError = null;
+    }
+
+    private Task SaveAsync() => RunBusyAsync(async () =>
+    {
+        if (_editing is null) return;
+        var result = await Use<IBeneficiaryService>().Run(s => s.SaveAsync(_editing));
+        if (result.IsFailure) { _formError = result.Error; return; }
+
+        Toast.Success(_editing.Id is null ? $"Beneficiary \"{_editing.FullName.Trim()}\" registered." : "Beneficiary updated.");
+        CloseForm();
+        await LoadAsync();
+    });
+
+    private async Task ViewAsync(int id) =>
+        _profile = await Use<IBeneficiaryService>().Run(s => s.GetProfileAsync(id));
+
+    private async Task ArchiveAsync(BeneficiaryDto b)
+    {
+        if (!await Confirm.AskAsync("Archive this beneficiary?",
+                $"{b.FullName} ({b.Code}) will be hidden and can no longer receive items. Past distributions stay in the records.",
+                "Archive", isDanger: true, icon: "fa-box-archive"))
+            return;
+
+        var result = await Use<IBeneficiaryService>().Run(s => s.ArchiveAsync(b.Id));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+        Toast.Success($"{b.FullName} archived.");
+        await LoadAsync();
+    }
+
+    private async Task RestoreAsync(BeneficiaryDto b)
+    {
+        var result = await Use<IBeneficiaryService>().Run(s => s.RestoreAsync(b.Id));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+        Toast.Success($"{b.FullName} restored.");
+        await LoadAsync();
+    }
+
+    private Task ExportAsync(ExportFormat format) => RunBusyAsync(() =>
+        ExportReportAsync(new ReportRequest { Type = ReportType.Beneficiaries }, format));
+}

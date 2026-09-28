@@ -1,0 +1,7 @@
+<div class="progress"><div class="progress-fill @FillClass" style="width:@(Percent)%"></div></div>
+
+@code {
+    [Parameter] public int Percent { get; set; }
+
+    private string FillClass => Percent <= 30 ? "pf-red" : Percent <= 60 ? "pf-amber" : "pf-green";
+}

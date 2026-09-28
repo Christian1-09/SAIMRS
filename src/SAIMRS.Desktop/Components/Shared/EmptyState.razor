@@ -1,0 +1,14 @@
+<div class="empty">
+    <i class="fas @Icon"></i>
+    <h4>@Title</h4>
+    @if (!string.IsNullOrEmpty(Message))
+    {
+        <p>@Message</p>
+    }
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "fa-inbox";
+    [Parameter] public string Title { get; set; } = "Nothing here yet";
+    [Parameter] public string? Message { get; set; }
+}

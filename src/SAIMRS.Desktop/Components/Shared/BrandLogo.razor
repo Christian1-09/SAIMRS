@@ -1,0 +1,8 @@
+@* Replace the icon below with <img src="img/logo.png" /> once the official logo is available. *@
+<div class="brand-logo @(Large ? "large" : "")">
+    <i class="fas fa-seedling"></i>
+</div>
+
+@code {
+    [Parameter] public bool Large { get; set; }
+}

@@ -1,0 +1,102 @@
+@page "/setup"
+@layout AuthLayout
+@inherits AppComponentBase
+
+<div class="auth-heading">
+    <h2>Create the admin account</h2>
+    <p>Welcome! This is the first time SAIMRS is opened on this computer. Set up the administrator account to get started.</p>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="form-error"><i class="fas fa-circle-exclamation"></i><span>@_error</span></div>
+}
+
+<form @onsubmit="SubmitAsync" class="auth-form">
+    <div class="line-row">
+        <div class="line-field">
+            <label>First Name</label>
+            <input type="text" @bind="_request.FirstName" maxlength="60" autofocus />
+        </div>
+        <div class="line-field">
+            <label>Last Name</label>
+            <input type="text" @bind="_request.LastName" maxlength="60" />
+        </div>
+    </div>
+
+    <div class="line-field">
+        <label>Username</label>
+        <input type="text" @bind="_request.Username" maxlength="50" autocomplete="off" />
+    </div>
+
+    <div class="line-field">
+        <label>Password</label>
+        <div class="with-toggle">
+            <input type="@(_showPassword ? "text" : "password")" @bind="_request.Password" />
+            <button type="button" class="toggle-eye" @onclick="() => _showPassword = !_showPassword" title="Show / hide">
+                <i class="fas @(_showPassword ? "fa-eye-slash" : "fa-eye")"></i>
+            </button>
+        </div>
+        <small>At least @PasswordPolicy.MinLength characters.</small>
+    </div>
+
+    <div class="line-field">
+        <label>Confirm Password</label>
+        <input type="@(_showPassword ? "text" : "password")" @bind="_request.ConfirmPassword" />
+    </div>
+
+    <div class="setup-divider"><i class="fas fa-shield-halved"></i> Password recovery</div>
+
+    <div class="line-field">
+        <label>Security Question</label>
+        <select @bind="_request.SecurityQuestion">
+            <option value="">— Choose a question —</option>
+            @foreach (var q in _questions)
+            {
+                <option value="@q.Value">@q.Text</option>
+            }
+        </select>
+    </div>
+
+    <div class="line-field">
+        <label>Answer</label>
+        <input type="text" @bind="_request.SecurityAnswer" autocomplete="off" />
+        <small>You'll need this answer if you forget your password. Capital letters don't matter.</small>
+    </div>
+
+    <button type="submit" class="btn primary block" disabled="@Busy">
+        @if (Busy) { <i class="fas fa-spinner fa-spin"></i> } else { <i class="fas fa-user-shield"></i> }
+        CREATE ACCOUNT
+    </button>
+</form>
+
+@code {
+    private readonly SetupAdminRequest _request = new();
+    private IReadOnlyList<SecurityQuestionOption> _questions = [];
+    private bool _showPassword;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await Use<IAuthService>().Run(s => s.IsSetupRequiredAsync()))
+        {
+            Nav.NavigateTo("login", replace: true);
+            return;
+        }
+        _questions = await Use<IAuthService>().Run(s => Task.FromResult(s.GetSecurityQuestionOptions()));
+    }
+
+    private Task SubmitAsync() => RunBusyAsync(async () =>
+    {
+        _error = null;
+        var result = await Use<IAuthService>().Run(s => s.RegisterAsync(_request));
+        if (result.IsFailure)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        Toast.Success("Admin account created. Please log in.");
+        Nav.NavigateTo("login", replace: true);
+    });
+}

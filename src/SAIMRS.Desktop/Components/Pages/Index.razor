@@ -1,0 +1,15 @@
+@page "/"
+@layout EmptyLayout
+@inherits AppComponentBase
+
+@* Start page: decides between first-run Setup, Login and the Dashboard. *@
+<div class="boot-screen"><i class="fas fa-seedling"></i><span>Loading SAIMRS…</span></div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var setupRequired = await Use<IAuthService>().Run(s => s.IsSetupRequiredAsync());
+        var target = setupRequired ? "setup" : Auth.IsAuthenticated ? "dashboard" : "login";
+        Nav.NavigateTo(target, replace: true);
+    }
+}

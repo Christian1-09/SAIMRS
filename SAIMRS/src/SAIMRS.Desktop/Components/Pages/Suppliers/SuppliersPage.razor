@@ -1,0 +1,154 @@
+@page "/suppliers"
+@inherits AppComponentBase
+
+<div class="sec-header">
+    <div>
+        <div class="sec-title">@(_showArchived ? "Archived suppliers" : "Suppliers")</div>
+        <div class="sec-sub">"Last delivery" updates automatically when a Stock IN names the supplier.</div>
+    </div>
+    <div class="sec-actions">
+        <label class="toggle-label"><input type="checkbox" checked="@_showArchived" @onchange="ToggleArchivedAsync" /> Show archived</label>
+        @if (!_showArchived)
+        {
+            <button class="btn primary" @onclick="OpenAdd"><i class="fas fa-plus"></i> Add Supplier</button>
+        }
+    </div>
+</div>
+
+<div class="tbl-wrap">
+    <table>
+        <thead><tr><th>Supplier Name</th><th>Contact Person</th><th>Phone</th><th>Items Supplied</th><th>Last Delivery</th><th>Actions</th></tr></thead>
+        <tbody>
+            @if (_list is null)
+            {
+                <tr><td colspan="6"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div></td></tr>
+            }
+            else if (_list.Count == 0)
+            {
+                <tr><td colspan="6"><EmptyState Icon="fa-truck" Title="@(_showArchived ? "No archived suppliers" : "No suppliers yet")" /></td></tr>
+            }
+            else
+            {
+                foreach (var s in _list)
+                {
+                    <tr class="@(s.IsArchived ? "archived-row" : "")">
+                        <td><b class="strong">@s.Name</b></td>
+                        <td>@(s.ContactPerson ?? "—")</td>
+                        <td class="mono small">@(s.Phone ?? "—")</td>
+                        <td class="muted small">@(s.ItemsSupplied ?? "—")</td>
+                        <td class="muted small">@(s.LastDeliveryDate?.ToString("MMM d, yyyy") ?? "—")</td>
+                        <td>
+                            <div class="tbl-actions">
+                                @if (s.IsArchived)
+                                {
+                                    <button class="act-btn edit" title="Restore" @onclick="() => RestoreAsync(s)"><i class="fas fa-rotate-left"></i></button>
+                                }
+                                else
+                                {
+                                    <button class="act-btn edit" title="Edit" @onclick="() => OpenEdit(s)"><i class="fas fa-pen"></i></button>
+                                    <button class="act-btn del" title="Archive" @onclick="() => ArchiveAsync(s)"><i class="fas fa-box-archive"></i></button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_editing is not null)
+{
+    <Modal Title="@(_editing.Id is null ? "Add Supplier" : "Edit Supplier")" Icon="fa-truck" Error="@_formError" OnClose="CloseForm">
+        <ChildContent>
+            <form id="sup-form" @onsubmit="SaveAsync">
+                <div class="form-row">
+                    <div class="form-group"><label>Supplier Name *</label><input type="text" @bind="_editing.Name" placeholder="Company name" maxlength="120" /></div>
+                    <div class="form-group"><label>Contact Person</label><input type="text" @bind="_editing.ContactPerson" placeholder="Full name" maxlength="120" /></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Phone</label><input type="text" @bind="_editing.Phone" placeholder="09XX-XXX-XXXX" maxlength="30" /></div>
+                    <div class="form-group"><label>Items Supplied</label><input type="text" @bind="_editing.ItemsSupplied" placeholder="Seeds, Fertilizers…" maxlength="300" /></div>
+                </div>
+            </form>
+        </ChildContent>
+        <Footer>
+            <button type="button" class="btn ghost" @onclick="CloseForm">Cancel</button>
+            <button type="submit" form="sup-form" class="btn primary" disabled="@Busy"><i class="fas fa-floppy-disk"></i> Save Supplier</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    private List<SupplierDto>? _list;
+    private bool _showArchived;
+    private SaveSupplierRequest? _editing;
+    private string? _formError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.SetTitle("Suppliers");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _list = await Use<ISupplierService>().Run(s => s.ListAsync(_showArchived));
+
+    private async Task ToggleArchivedAsync(ChangeEventArgs e)
+    {
+        _showArchived = e.Value is true;
+        await LoadAsync();
+    }
+
+    private void OpenAdd()
+    {
+        _formError = null;
+        _editing = new SaveSupplierRequest();
+    }
+
+    private void OpenEdit(SupplierDto s)
+    {
+        _formError = null;
+        _editing = new SaveSupplierRequest
+        {
+            Id = s.Id, Name = s.Name, ContactPerson = s.ContactPerson, Phone = s.Phone, ItemsSupplied = s.ItemsSupplied
+        };
+    }
+
+    private void CloseForm()
+    {
+        _editing = null;
+        _formError = null;
+    }
+
+    private Task SaveAsync() => RunBusyAsync(async () =>
+    {
+        if (_editing is null) return;
+        var result = await Use<ISupplierService>().Run(s => s.SaveAsync(_editing));
+        if (result.IsFailure) { _formError = result.Error; return; }
+
+        Toast.Success(_editing.Id is null ? $"Supplier \"{_editing.Name.Trim()}\" added." : "Supplier updated.");
+        CloseForm();
+        await LoadAsync();
+    });
+
+    private async Task ArchiveAsync(SupplierDto s)
+    {
+        if (!await Confirm.AskAsync("Archive this supplier?",
+                $"\"{s.Name}\" will no longer appear in forms. Past deliveries stay in the records.",
+                "Archive", isDanger: true, icon: "fa-box-archive"))
+            return;
+
+        var result = await Use<ISupplierService>().Run(svc => svc.ArchiveAsync(s.Id));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+        Toast.Success($"\"{s.Name}\" archived.");
+        await LoadAsync();
+    }
+
+    private async Task RestoreAsync(SupplierDto s)
+    {
+        var result = await Use<ISupplierService>().Run(svc => svc.RestoreAsync(s.Id));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+        Toast.Success($"\"{s.Name}\" restored.");
+        await LoadAsync();
+    }
+}

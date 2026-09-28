@@ -1,0 +1,283 @@
+@page "/inventory"
+@inherits AppComponentBase
+
+<div class="sec-header">
+    <div>
+        <div class="sec-title">@(_showArchived ? "Archived items" : "Inventory items")</div>
+        <div class="sec-sub">Quantities change through <a href="transactions">Transactions</a> (Stock IN, OUT or Adjust).</div>
+    </div>
+    <div class="sec-actions">
+        <button class="btn ghost" @onclick="() => ExportAsync(ExportFormat.Pdf)" disabled="@Busy"><i class="fas fa-file-pdf"></i> PDF</button>
+        <button class="btn ghost" @onclick="() => ExportAsync(ExportFormat.Excel)" disabled="@Busy"><i class="fas fa-file-excel"></i> Excel</button>
+        @if (!_showArchived)
+        {
+            <button class="btn primary" @onclick="OpenAddAsync"><i class="fas fa-plus"></i> Add Item</button>
+        }
+    </div>
+</div>
+
+<div class="cat-pills">
+    <button class="cat-pill @(_filter.CategoryId is null ? "active" : "")" @onclick="() => SetCategoryAsync(null)">All Items</button>
+    @foreach (var c in _categories)
+    {
+        var id = c.Id;
+        <button class="cat-pill @(_filter.CategoryId == id ? "active" : "")" @onclick="() => SetCategoryAsync(id)">@c.Name</button>
+    }
+</div>
+
+<div class="filters">
+    <span class="filter-label">Filter:</span>
+    <select @bind="StatusFilter">
+        <option value="">All Status</option>
+        <option value="@StockStatus.InStock">In Stock</option>
+        <option value="@StockStatus.LowStock">Low Stock</option>
+        <option value="@StockStatus.OutOfStock">Out of Stock</option>
+    </select>
+    <select @bind="SortFilter">
+        <option value="@InventorySort.Name">Sort: Name</option>
+        <option value="@InventorySort.QuantityLowToHigh">Sort: Quantity (low first)</option>
+        <option value="@InventorySort.RecentlyUpdated">Sort: Recently updated</option>
+    </select>
+    <input type="text" placeholder="Search items…" style="width:220px" @bind="SearchText" @bind:event="oninput" />
+    <label class="toggle-label">
+        <input type="checkbox" checked="@_showArchived" @onchange="ToggleArchivedAsync" /> Show archived
+    </label>
+</div>
+
+<div class="tbl-wrap">
+    <table>
+        <thead>
+            <tr><th>Item Name</th><th>Category</th><th class="num">Quantity</th><th>Unit</th><th class="num">Threshold</th><th class="num">Value (at cost)</th><th>Status</th><th>Last Updated</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+            @if (_page is null)
+            {
+                <tr><td colspan="9"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div></td></tr>
+            }
+            else if (_page.Items.Count == 0)
+            {
+                <tr><td colspan="9"><EmptyState Icon="fa-magnifying-glass" Title="No items found" Message="Try adjusting your filters." /></td></tr>
+            }
+            else
+            {
+                foreach (var item in _page.Items)
+                {
+                    <tr class="@(item.IsArchived ? "archived-row" : "")">
+                        <td><b class="strong">@item.Name</b>@if (!string.IsNullOrEmpty(item.SupplierName)) {<div class="cell-sub">@item.SupplierName</div>}</td>
+                        <td>@item.CategoryName</td>
+                        <td class="num mono">@Formatting.Qty(item.Quantity)</td>
+                        <td>@item.Unit</td>
+                        <td class="num mono">@Formatting.Qty(item.LowStockThreshold)</td>
+                        <td class="num mono">@(item.UnitCost is null ? "—" : Formatting.Peso(item.StockValue))</td>
+                        <td><Badge Color="@UiText.BadgeClass(item.Status)">@item.Status.ToDisplay()</Badge></td>
+                        <td class="muted small">@item.LastUpdated.ToString("MMM d, yyyy")</td>
+                        <td>
+                            <div class="tbl-actions">
+                                <button class="act-btn" title="View details" @onclick="() => ViewAsync(item.Id)"><i class="fas fa-eye"></i></button>
+                                @if (item.IsArchived)
+                                {
+                                    <button class="act-btn edit" title="Restore" @onclick="() => RestoreAsync(item)"><i class="fas fa-rotate-left"></i></button>
+                                }
+                                else
+                                {
+                                    <button class="act-btn edit" title="Edit" @onclick="() => OpenEditAsync(item)"><i class="fas fa-pen"></i></button>
+                                    <button class="act-btn del" title="Archive" @onclick="() => ArchiveAsync(item)"><i class="fas fa-box-archive"></i></button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_page is not null)
+{
+    <Pagination Page="_page.Page" TotalPages="_page.TotalPages" TotalCount="_page.TotalCount" PageChanged="GoToPageAsync" />
+}
+
+@if (_editing is not null)
+{
+    <ItemFormModal Request="_editing" Categories="_categories" Suppliers="_suppliers" Busy="Busy" Error="@_formError"
+                   OnSave="SaveAsync" OnCancel="CloseForm" />
+}
+
+@if (_details is not null)
+{
+    <ItemDetailsModal Details="_details" OnClose="() => _details = null" />
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "search")] public string? SearchQuery { get; set; }
+
+    private InventoryFilter _filter = new();
+    private PagedResult<InventoryItemDto>? _page;
+    private List<CategoryDto> _categories = [];
+    private List<LookupItem> _suppliers = [];
+    private bool _showArchived;
+    private string _search = string.Empty;
+    private CancellationTokenSource? _searchDelay;
+
+    private SaveItemRequest? _editing;
+    private string? _formError;
+    private InventoryItemDetailsDto? _details;
+
+    private StockStatus? StatusFilter
+    {
+        get => _filter.Status;
+        set { _filter = _filter with { Status = value, Page = 1 }; _ = LoadAsync(); }
+    }
+
+    private InventorySort SortFilter
+    {
+        get => _filter.Sort;
+        set { _filter = _filter with { Sort = value, Page = 1 }; _ = LoadAsync(); }
+    }
+
+    private string SearchText
+    {
+        get => _search;
+        set { _search = value; _ = DebouncedSearchAsync(); }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.SetTitle("Inventory Management");
+        _categories = await Use<ICategoryService>().Run(s => s.ListAsync());
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Runs on first load and when the top-bar search navigates here again.
+        _search = SearchQuery ?? string.Empty;
+        _filter = _filter with { Search = _search, Page = 1 };
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _page = await Use<IInventoryService>().Run(s => s.SearchAsync(_filter with { ShowArchived = _showArchived }));
+        StateHasChanged();
+    }
+
+    private async Task DebouncedSearchAsync()
+    {
+        _searchDelay?.Cancel();
+        _searchDelay = new CancellationTokenSource();
+        var token = _searchDelay.Token;
+        try
+        {
+            await Task.Delay(300, token);
+            _filter = _filter with { Search = _search, Page = 1 };
+            await LoadAsync();
+        }
+        catch (TaskCanceledException)
+        {
+            // A newer keystroke replaced this search.
+        }
+    }
+
+    private async Task SetCategoryAsync(int? categoryId)
+    {
+        _filter = _filter with { CategoryId = categoryId, Page = 1 };
+        await LoadAsync();
+    }
+
+    private async Task ToggleArchivedAsync(ChangeEventArgs e)
+    {
+        _showArchived = e.Value is true;
+        _filter = _filter with { Page = 1 };
+        await LoadAsync();
+    }
+
+    private async Task GoToPageAsync(int page)
+    {
+        _filter = _filter with { Page = page };
+        await LoadAsync();
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        _categories = await Use<ICategoryService>().Run(s => s.ListAsync());
+        _suppliers = await Use<ISupplierService>().Run(s => s.GetLookupAsync());
+    }
+
+    private async Task OpenAddAsync()
+    {
+        await LoadLookupsAsync();
+        var threshold = await Use<IInventoryService>().Run(s => s.GetDefaultThresholdAsync());
+        _formError = null;
+        _editing = new SaveItemRequest { LowStockThreshold = threshold, Unit = Units.All[0] };
+    }
+
+    private async Task OpenEditAsync(InventoryItemDto item)
+    {
+        await LoadLookupsAsync();
+        _formError = null;
+        _editing = new SaveItemRequest
+        {
+            Id = item.Id,
+            Name = item.Name,
+            CategoryId = item.CategoryId,
+            SupplierId = item.SupplierId,
+            Unit = item.Unit,
+            LowStockThreshold = item.LowStockThreshold,
+            UnitCost = item.UnitCost,
+            Notes = item.Notes,
+            InitialQuantity = item.Quantity // shown read-only when editing
+        };
+    }
+
+    private void CloseForm()
+    {
+        _editing = null;
+        _formError = null;
+    }
+
+    private Task SaveAsync() => RunBusyAsync(async () =>
+    {
+        if (_editing is null) return;
+        var isNew = _editing.Id is null;
+        var result = await Use<IInventoryService>().Run(s => s.SaveAsync(_editing));
+        if (result.IsFailure)
+        {
+            _formError = result.Error;
+            return;
+        }
+
+        Toast.Success(isNew ? $"\"{_editing.Name.Trim()}\" added to inventory." : $"\"{_editing.Name.Trim()}\" updated.");
+        CloseForm();
+        Events.NotifyDataChanged();
+        await LoadAsync();
+    });
+
+    private async Task ViewAsync(int id) =>
+        _details = await Use<IInventoryService>().Run(s => s.GetDetailsAsync(id));
+
+    private async Task ArchiveAsync(InventoryItemDto item)
+    {
+        if (!await Confirm.AskAsync("Archive this item?",
+                $"\"{item.Name}\" will be hidden from lists and forms. Its transaction history stays in reports, and you can restore it anytime.",
+                "Archive", isDanger: true, icon: "fa-box-archive"))
+            return;
+
+        var result = await Use<IInventoryService>().Run(s => s.ArchiveAsync(item.Id));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+        Toast.Success($"\"{item.Name}\" archived.");
+        Events.NotifyDataChanged();
+        await LoadAsync();
+    }
+
+    private async Task RestoreAsync(InventoryItemDto item)
+    {
+        var result = await Use<IInventoryService>().Run(s => s.RestoreAsync(item.Id));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+        Toast.Success($"\"{item.Name}\" restored.");
+        Events.NotifyDataChanged();
+        await LoadAsync();
+    }
+
+    private Task ExportAsync(ExportFormat format) => RunBusyAsync(() =>
+        ExportReportAsync(new ReportRequest { Type = ReportType.InventorySummary, CategoryId = _filter.CategoryId }, format));
+}

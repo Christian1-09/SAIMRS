@@ -1,0 +1,67 @@
+@page "/login"
+@layout AuthLayout
+@inherits AppComponentBase
+
+<div class="auth-heading">
+    <h2>Welcome Back</h2>
+    <p>Sign in to manage inventory, distributions and reports.</p>
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="form-error"><i class="fas fa-circle-exclamation"></i><span>@_error</span></div>
+}
+
+<form @onsubmit="SubmitAsync" class="auth-form">
+    <div class="line-field">
+        <label>Username</label>
+        <input type="text" @bind="_request.Username" autocomplete="username" autofocus />
+    </div>
+
+    <div class="line-field">
+        <label>Password</label>
+        <div class="with-toggle">
+            <input type="@(_showPassword ? "text" : "password")" @bind="_request.Password" autocomplete="current-password" />
+            <button type="button" class="toggle-eye" @onclick="() => _showPassword = !_showPassword" title="Show / hide">
+                <i class="fas @(_showPassword ? "fa-eye-slash" : "fa-eye")"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="auth-link-row">
+        <a href="forgot-password" class="auth-link">FORGOT PASSWORD?</a>
+    </div>
+
+    <button type="submit" class="btn primary block" disabled="@Busy">
+        @if (Busy) { <i class="fas fa-spinner fa-spin"></i> } else { <i class="fas fa-right-to-bracket"></i> }
+        LOG IN
+    </button>
+</form>
+
+@code {
+    private readonly LoginRequest _request = new();
+    private bool _showPassword;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Use<IAuthService>().Run(s => s.IsSetupRequiredAsync()))
+            Nav.NavigateTo("setup", replace: true);
+    }
+
+    private Task SubmitAsync() => RunBusyAsync(async () =>
+    {
+        _error = null;
+        var result = await Use<IAuthService>().Run(s => s.LoginAsync(_request));
+        if (result.IsFailure || result.Value is null)
+        {
+            _error = result.Error;
+            _request.Password = string.Empty;
+            return;
+        }
+
+        Auth.SignIn(result.Value);
+        Toast.Success($"Welcome back, {result.Value.FirstName}!");
+        Nav.NavigateTo("dashboard", replace: true);
+    });
+}

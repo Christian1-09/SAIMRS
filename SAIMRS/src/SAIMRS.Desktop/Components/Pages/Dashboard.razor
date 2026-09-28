@@ -1,0 +1,117 @@
+@page "/dashboard"
+@inherits AppComponentBase
+
+@if (_data is null)
+{
+    <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading dashboard…</div>
+}
+else
+{
+    <div class="stats-grid">
+        <StatCard Label="Total Items" Value="@_data.TotalItems.ToString()" Icon="fa-boxes-stacked" IconClass="g-icon">
+            <Sub>Across <span>@_data.CategoryCount</span> categories</Sub>
+        </StatCard>
+        <StatCard Label="Low / Out of Stock" Value="@_data.LowStockCount.ToString()" Icon="fa-triangle-exclamation" IconClass="r-icon">
+            <Sub>Items at or below threshold</Sub>
+        </StatCard>
+        <StatCard Label="Expiring Batches" Value="@_data.NearExpiryCount.ToString()" Icon="fa-calendar-xmark" IconClass="a-icon">
+            <Sub>Expired or near expiry</Sub>
+        </StatCard>
+        <StatCard Label="Inventory Value" Value="@Formatting.Peso(_data.StockValue)" Icon="fa-peso-sign" IconClass="b-icon">
+            <Sub>At acquisition cost · <span>@_data.ActiveBeneficiaries</span> active beneficiaries</Sub>
+        </StatCard>
+    </div>
+
+    @if (_data.TopAlerts.Count > 0)
+    {
+        <div class="alerts-row">
+            @foreach (var alert in _data.TopAlerts)
+            {
+                <a class="alert-card @UiText.AlertClass(alert.Severity) clickable" href="@alert.Link.TrimStart('/')">
+                    <i class="fas @alert.Icon"></i>
+                    <div><div class="alert-title">@alert.Title</div><div class="alert-desc">@alert.Description</div></div>
+                </a>
+            }
+        </div>
+    }
+
+    <div class="chart-row">
+        <div class="chart-card">
+            <div class="chart-title">Stock movement — last 6 months</div>
+            <BarChart Data="_data.MonthlyMovement" />
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Items by category</div>
+            <DonutChart Data="_data.CategoryShare" />
+        </div>
+    </div>
+
+    <div class="chart-row">
+        <div class="chart-card">
+            <div class="chart-title-row">
+                <div class="chart-title">Low stock items</div>
+                <a href="inventory" class="link-sm">View inventory <i class="fas fa-chevron-right"></i></a>
+            </div>
+            @if (_data.LowStockItems.Count == 0)
+            {
+                <EmptyState Icon="fa-circle-check" Title="All stock levels are healthy" />
+            }
+            else
+            {
+                foreach (var item in _data.LowStockItems)
+                {
+                    <div class="ls-row">
+                        <div class="ls-name">@item.Name</div>
+                        <div class="ls-qty">@Formatting.Qty(item.Quantity)/@Formatting.Qty(item.Threshold) @item.Unit</div>
+                        <div class="ls-pct"><ProgressBar Percent="item.Percent" /></div>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-title-row">
+                <div class="chart-title">Recent activity</div>
+                <a href="transactions" class="link-sm">All transactions <i class="fas fa-chevron-right"></i></a>
+            </div>
+            @if (_data.RecentActivity.Count == 0)
+            {
+                <EmptyState Icon="fa-clock" Title="No transactions yet" />
+            }
+            else
+            {
+                <div class="activity-list">
+                    @foreach (var t in _data.RecentActivity)
+                    {
+                        var color = UiText.TransactionColor(t.Type);
+                        <div class="activity-item">
+                            <div class="act-icon" style="background:color-mix(in srgb, @color 14%, white);color:@color"><i class="fas @UiText.TransactionIcon(t.Type)"></i></div>
+                            <div class="act-text">
+                                <b>@ActivityVerb(t.Type)</b> @t.ItemName — @Formatting.Qty(Math.Abs(t.QuantityChange)) @t.Unit
+                                @if (!string.IsNullOrEmpty(t.Party)) { <span class="muted"> · @t.Party</span> }
+                                <div class="act-time">@UiText.RelativeTime(t.Date, DateTime.Now) · @t.ReferenceNo</div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private DashboardDto? _data;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.SetTitle("Dashboard");
+        _data = await Use<IDashboardService>().Run(s => s.GetAsync());
+    }
+
+    private static string ActivityVerb(TransactionType type) => type switch
+    {
+        TransactionType.In => "Stock IN:",
+        TransactionType.Out => "Issued:",
+        _ => "Adjusted:"
+    };
+}

@@ -1,0 +1,9 @@
+@* Root component (see MainWindow.xaml). Pages without a @layout use MainLayout. *@
+<Router AppAssembly="typeof(MainWindow).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+    </Found>
+</Router>
+
+<ToastHost />
+<ConfirmHost />

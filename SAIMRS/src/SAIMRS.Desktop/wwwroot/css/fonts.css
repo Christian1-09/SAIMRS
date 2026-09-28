@@ -1,0 +1,8 @@
+/* DM Sans and DM Mono bundled locally (SIL Open Font License) so the app works offline. */
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 300; font-display: swap; src: url('../lib/fonts/dm-sans-latin-300-normal.woff2') format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('../lib/fonts/dm-sans-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('../lib/fonts/dm-sans-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('../lib/fonts/dm-sans-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('../lib/fonts/dm-sans-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'DM Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('../lib/fonts/dm-mono-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'DM Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('../lib/fonts/dm-mono-latin-500-normal.woff2') format('woff2'); }

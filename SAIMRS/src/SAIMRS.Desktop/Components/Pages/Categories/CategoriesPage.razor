@@ -1,0 +1,133 @@
+@page "/categories"
+@inherits AppComponentBase
+
+<div class="sec-header">
+    <div>
+        <div class="sec-title">Categories</div>
+        <div class="sec-sub">A category can only be deleted when it has no items (including archived items).</div>
+    </div>
+    <div class="sec-actions">
+        <button class="btn primary" @onclick="OpenAdd"><i class="fas fa-plus"></i> Add Category</button>
+    </div>
+</div>
+
+<div class="tbl-wrap">
+    <table>
+        <thead><tr><th>Category Name</th><th>Description</th><th>Item Count</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>
+            @if (_list is null)
+            {
+                <tr><td colspan="5"><div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div></td></tr>
+            }
+            else if (_list.Count == 0)
+            {
+                <tr><td colspan="5"><EmptyState Icon="fa-tags" Title="No categories yet" /></td></tr>
+            }
+            else
+            {
+                foreach (var c in _list)
+                {
+                    <tr>
+                        <td><b class="strong">@c.Name</b></td>
+                        <td class="muted">@(c.Description ?? "—")</td>
+                        <td><Badge Color="blue">@c.ItemCount</Badge></td>
+                        <td class="muted small">@c.CreatedAt.ToString("MMM d, yyyy")</td>
+                        <td>
+                            <div class="tbl-actions">
+                                <button class="act-btn edit" title="Edit" @onclick="() => OpenEdit(c)"><i class="fas fa-pen"></i></button>
+                                <button class="act-btn del" title="@(c.ItemCount > 0 ? "Has items — cannot delete" : "Delete")" @onclick="() => DeleteAsync(c)"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (_editing is not null)
+{
+    <Modal Title="@(_editing.Id is null ? "Add Category" : "Edit Category")" Icon="fa-tags" Width="420" Error="@_formError" OnClose="CloseForm">
+        <ChildContent>
+            <form id="cat-form" @onsubmit="SaveAsync">
+                <div class="form-row full">
+                    <div class="form-group">
+                        <label>Category Name *</label>
+                        <input type="text" @bind="_editing.Name" placeholder="e.g. Pesticides" maxlength="80" />
+                    </div>
+                </div>
+                <div class="form-row full">
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea @bind="_editing.Description" style="height:70px" placeholder="Brief description…" maxlength="300"></textarea>
+                    </div>
+                </div>
+            </form>
+        </ChildContent>
+        <Footer>
+            <button type="button" class="btn ghost" @onclick="CloseForm">Cancel</button>
+            <button type="submit" form="cat-form" class="btn primary" disabled="@Busy"><i class="fas fa-floppy-disk"></i> Save Category</button>
+        </Footer>
+    </Modal>
+}
+
+@code {
+    private List<CategoryDto>? _list;
+    private SaveCategoryRequest? _editing;
+    private string? _formError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.SetTitle("Categories");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _list = await Use<ICategoryService>().Run(s => s.ListAsync());
+
+    private void OpenAdd()
+    {
+        _formError = null;
+        _editing = new SaveCategoryRequest();
+    }
+
+    private void OpenEdit(CategoryDto c)
+    {
+        _formError = null;
+        _editing = new SaveCategoryRequest { Id = c.Id, Name = c.Name, Description = c.Description };
+    }
+
+    private void CloseForm()
+    {
+        _editing = null;
+        _formError = null;
+    }
+
+    private Task SaveAsync() => RunBusyAsync(async () =>
+    {
+        if (_editing is null) return;
+        var result = await Use<ICategoryService>().Run(s => s.SaveAsync(_editing));
+        if (result.IsFailure) { _formError = result.Error; return; }
+
+        Toast.Success(_editing.Id is null ? $"Category \"{_editing.Name.Trim()}\" created." : "Category updated.");
+        CloseForm();
+        await LoadAsync();
+    });
+
+    private async Task DeleteAsync(CategoryDto c)
+    {
+        if (c.ItemCount > 0)
+        {
+            Toast.Warning($"\"{c.Name}\" still has {c.ItemCount} item(s). Move or remove those items first.");
+            return;
+        }
+
+        if (!await Confirm.AskAsync("Delete this category?", $"\"{c.Name}\" will be permanently removed.",
+                "Delete", isDanger: true, icon: "fa-trash"))
+            return;
+
+        var result = await Use<ICategoryService>().Run(s => s.DeleteAsync(c.Id));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+        Toast.Success($"Category \"{c.Name}\" deleted.");
+        await LoadAsync();
+    }
+}

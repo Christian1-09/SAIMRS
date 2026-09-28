@@ -1,0 +1,31 @@
+@if (TotalPages > 1)
+{
+    <div class="pagination">
+        <span class="pag-info">Page @Page of @TotalPages · @TotalCount record(s)</span>
+        <button class="pag-btn" disabled="@(Page <= 1)" @onclick="() => Go(Page - 1)"><i class="fas fa-chevron-left"></i></button>
+        @foreach (var p in VisiblePages())
+        {
+            var number = p;
+            <button class="pag-btn @(number == Page ? "active" : "")" @onclick="() => Go(number)">@number</button>
+        }
+        <button class="pag-btn" disabled="@(Page >= TotalPages)" @onclick="() => Go(Page + 1)"><i class="fas fa-chevron-right"></i></button>
+    </div>
+}
+
+@code {
+    [Parameter] public int Page { get; set; }
+    [Parameter] public int TotalPages { get; set; }
+    [Parameter] public int TotalCount { get; set; }
+    [Parameter] public EventCallback<int> PageChanged { get; set; }
+
+    private IEnumerable<int> VisiblePages()
+    {
+        var start = Math.Max(1, Page - 2);
+        var end = Math.Min(TotalPages, start + 4);
+        start = Math.Max(1, end - 4);
+        return Enumerable.Range(start, end - start + 1);
+    }
+
+    private Task Go(int page) =>
+        page < 1 || page > TotalPages || page == Page ? Task.CompletedTask : PageChanged.InvokeAsync(page);
+}

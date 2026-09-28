@@ -1,0 +1,47 @@
+@implements IDisposable
+@inject ToastService Toasts
+
+<div id="toast">
+    @foreach (var toast in _items)
+    {
+        <div class="toast-item @CssClass(toast.Kind)" @key="toast.Id">
+            <i class="fas @Icon(toast.Kind)"></i><span>@toast.Text</span>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<ToastMessage> _items = [];
+
+    protected override void OnInitialized() => Toasts.Shown += OnShown;
+
+    private void OnShown(ToastMessage message)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            _items.Add(message);
+            StateHasChanged();
+            await Task.Delay(message.Kind == ToastKind.Error ? 5000 : 3200);
+            _items.Remove(message);
+            StateHasChanged();
+        });
+    }
+
+    private static string CssClass(ToastKind kind) => kind switch
+    {
+        ToastKind.Success => "success",
+        ToastKind.Error => "error",
+        ToastKind.Warning => "warning",
+        _ => ""
+    };
+
+    private static string Icon(ToastKind kind) => kind switch
+    {
+        ToastKind.Success => "fa-circle-check",
+        ToastKind.Error => "fa-circle-xmark",
+        ToastKind.Warning => "fa-triangle-exclamation",
+        _ => "fa-circle-info"
+    };
+
+    public void Dispose() => Toasts.Shown -= OnShown;
+}

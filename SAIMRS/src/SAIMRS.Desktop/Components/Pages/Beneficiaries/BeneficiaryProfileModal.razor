@@ -1,0 +1,59 @@
+<Modal Title="Beneficiary Profile" Icon="fa-user" Width="680" OnClose="OnClose">
+    <ChildContent>
+        @{ var b = Profile.Beneficiary; }
+        <div class="profile-head">
+            <Avatar Initials="@Initials(b.FullName)" Size="52" />
+            <div>
+                <div class="profile-name">@b.FullName</div>
+                <div class="profile-code">@b.Code @if (b.IsArchived) { <Badge Color="gray">Archived</Badge> }</div>
+            </div>
+            <div style="margin-left:auto"><Badge Color="@UiText.BadgeClass(b.Status)">@b.Status</Badge></div>
+        </div>
+
+        <div class="detail-grid">
+            <div><label>Barangay</label><span>@b.Barangay</span></div>
+            <div><label>Contact No.</label><span>@(b.ContactNumber ?? "—")</span></div>
+            <div><label>Farm Size</label><span>@(b.FarmSizeHectares > 0 ? $"{Formatting.Qty(b.FarmSizeHectares)} ha" : "—")</span></div>
+            <div><label>Crop Type</label><span>@b.CropType</span></div>
+            <div><label>Date Registered</label><span>@b.DateRegistered.ToString("MMM d, yyyy")</span></div>
+            <div><label>Total Received (at cost)</label><span class="mono">@Formatting.Peso(Profile.TotalValueReceived)</span></div>
+        </div>
+
+        <div class="chart-title" style="margin:18px 0 8px">Items received (@Profile.ItemsReceived.Count)</div>
+        @if (Profile.ItemsReceived.Count == 0)
+        {
+            <EmptyState Icon="fa-hand-holding-heart" Title="Nothing received yet" Message="Items issued through Stock OUT will appear here." />
+        }
+        else
+        {
+            <div class="tbl-wrap compact">
+                <table>
+                    <thead><tr><th>Date</th><th>Item</th><th class="num">Quantity</th><th class="num">Value</th><th>Reference</th></tr></thead>
+                    <tbody>
+                        @foreach (var r in Profile.ItemsReceived)
+                        {
+                            <tr>
+                                <td class="small">@r.Date.ToString("MMM d, yyyy")</td>
+                                <td>@r.ItemName</td>
+                                <td class="num mono">@Formatting.Qty(r.Quantity) @r.Unit</td>
+                                <td class="num mono">@(r.Value > 0 ? Formatting.Peso(r.Value) : "—")</td>
+                                <td class="mono small">@r.ReferenceNo</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <button class="btn ghost" @onclick="OnClose">Close</button>
+    </Footer>
+</Modal>
+
+@code {
+    [Parameter, EditorRequired] public BeneficiaryProfileDto Profile { get; set; } = default!;
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private static string Initials(string name) =>
+        string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+}

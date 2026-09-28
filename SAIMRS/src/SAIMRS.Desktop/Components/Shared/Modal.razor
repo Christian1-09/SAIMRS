@@ -1,0 +1,30 @@
+@* Generic dialog. Render it only while it should be visible: @if (show) { <Modal ...> } *@
+<div class="modal-overlay open">
+    <div class="modal" style="width:@(Width)px">
+        <div class="modal-header">
+            <span class="modal-title">@if (!string.IsNullOrEmpty(Icon)) {<i class="fas @Icon" style="color:var(--green-600);margin-right:8px"></i>}@Title</span>
+            <button type="button" class="modal-close" @onclick="OnClose" title="Close"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="modal-body">
+            @if (!string.IsNullOrWhiteSpace(Error))
+            {
+                <div class="form-error"><i class="fas fa-circle-exclamation"></i><span>@Error</span></div>
+            }
+            @ChildContent
+        </div>
+        @if (Footer is not null)
+        {
+            <div class="modal-footer">@Footer</div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public int Width { get; set; } = 540;
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Footer { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+}

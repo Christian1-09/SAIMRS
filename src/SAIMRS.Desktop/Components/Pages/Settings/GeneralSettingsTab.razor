@@ -1,0 +1,54 @@
+@inherits AppComponentBase
+
+@if (_settings is null)
+{
+    <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+}
+else
+{
+    <div class="settings-card">
+        <div class="settings-card-title">Facility &amp; alerts</div>
+        <form @onsubmit="SaveAsync">
+            <div class="form-row">
+                <div class="form-group"><label>Facility Name *</label><input type="text" @bind="_settings.FacilityName" maxlength="150" /></div>
+                <div class="form-group"><label>Location *</label><input type="text" @bind="_settings.Location" maxlength="200" /></div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Default Low Stock Threshold</label>
+                    <input type="number" min="0" step="any" @bind="_settings.DefaultLowStockThreshold" />
+                    <small>Pre-filled when adding a new item.</small>
+                </div>
+                <div class="form-group">
+                    <label>Near-Expiry Alert (days)</label>
+                    <input type="number" min="1" max="365" @bind="_settings.NearExpiryDays" />
+                    <small>Batches expiring within this many days are flagged.</small>
+                </div>
+            </div>
+            <div class="form-row full">
+                <div class="form-group">
+                    <label>Report Header Note</label>
+                    <textarea style="height:60px" @bind="_settings.ReportHeaderNote" maxlength="300"></textarea>
+                    <small>Printed under the facility name on every PDF and Excel report.</small>
+                </div>
+            </div>
+            <button type="submit" class="btn primary" disabled="@Busy"><i class="fas fa-floppy-disk"></i> Save Settings</button>
+        </form>
+    </div>
+}
+
+@code {
+    private SettingsDto? _settings;
+
+    protected override async Task OnInitializedAsync() =>
+        _settings = await Use<ISettingsService>().Run(s => s.GetAsync());
+
+    private Task SaveAsync() => RunBusyAsync(async () =>
+    {
+        if (_settings is null) return;
+        var result = await Use<ISettingsService>().Run(s => s.SaveAsync(_settings));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+        Toast.Success("Settings saved.");
+        Events.NotifyDataChanged();
+    });
+}

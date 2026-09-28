@@ -1,0 +1,54 @@
+@page "/alerts"
+@inherits AppComponentBase
+
+<div class="sec-header">
+    <div>
+        <div class="sec-title">Alerts &amp; notifications</div>
+        <div class="sec-sub">Generated automatically from stock levels, expiry dates and deliveries in the last 24 hours.</div>
+    </div>
+    <div class="sec-actions">
+        <button class="btn ghost" @onclick="LoadAsync"><i class="fas fa-rotate-right"></i> Refresh</button>
+    </div>
+</div>
+
+@if (_alerts is null)
+{
+    <div class="loading"><i class="fas fa-spinner fa-spin"></i> Checking…</div>
+}
+else if (_alerts.Count == 0)
+{
+    <div class="chart-card"><EmptyState Icon="fa-bell-slash" Title="No active alerts" Message="All stock levels and expiry dates are fine." /></div>
+}
+else
+{
+    <div class="alert-tabs">
+        <button class="cat-pill @(_severity is null ? "active" : "")" @onclick="() => _severity = null">All (@_alerts.Count)</button>
+        <button class="cat-pill @(_severity == AlertSeverity.Danger ? "active" : "")" @onclick="() => _severity = AlertSeverity.Danger">Critical (@Count(AlertSeverity.Danger))</button>
+        <button class="cat-pill @(_severity == AlertSeverity.Warning ? "active" : "")" @onclick="() => _severity = AlertSeverity.Warning">Warnings (@Count(AlertSeverity.Warning))</button>
+        <button class="cat-pill @(_severity == AlertSeverity.Info ? "active" : "")" @onclick="() => _severity = AlertSeverity.Info">Info (@Count(AlertSeverity.Info))</button>
+    </div>
+
+    @foreach (var a in _alerts.Where(x => _severity is null || x.Severity == _severity))
+    {
+        <a class="alert-card @UiText.AlertClass(a.Severity) clickable list" href="@a.Link.TrimStart('/')">
+            <i class="fas @a.Icon"></i>
+            <div style="flex:1"><div class="alert-title">@a.Title</div><div class="alert-desc">@a.Description</div></div>
+            <div class="alert-time">@(a.When is { } at ? UiText.RelativeTime(at, DateTime.Now) : "Auto-generated")</div>
+        </a>
+    }
+}
+
+@code {
+    private List<AlertDto>? _alerts;
+    private AlertSeverity? _severity;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Page.SetTitle("Alerts & Notifications");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _alerts = await Use<IAlertService>().Run(s => s.GetAlertsAsync());
+
+    private int Count(AlertSeverity severity) => _alerts?.Count(a => a.Severity == severity) ?? 0;
+}

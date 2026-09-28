@@ -1,0 +1,105 @@
+@inherits AppComponentBase
+@inject AppLifetimeService Lifetime
+
+@if (_info is null)
+{
+    <div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
+}
+else
+{
+    <div class="backup-grid">
+        <div class="settings-card">
+            <div class="settings-card-title"><i class="fas fa-database"></i> Database</div>
+            <div class="detail-grid one">
+                <div><label>Location</label><span class="mono small break">@_info.DatabasePath</span></div>
+                <div><label>Size</label><span>@_info.SizeText</span></div>
+                <div>
+                    <label>Last Backup</label>
+                    <span>
+                        @if (_info.LastBackupAt is { } last)
+                        {
+                            <text>@last.ToString("MMM d, yyyy h:mm tt")</text>
+                            if ((DateTime.Now - last).TotalDays > 7)
+                            {
+                                <Badge Color="amber">Over a week ago</Badge>
+                            }
+                        }
+                        else
+                        {
+                            <Badge Color="red">Never backed up</Badge>
+                        }
+                    </span>
+                </div>
+            </div>
+            <button class="btn ghost" style="margin-top:14px" @onclick="OpenFolder"><i class="fas fa-folder-open"></i> Open data folder</button>
+        </div>
+
+        <div class="settings-card">
+            <div class="settings-card-title"><i class="fas fa-download"></i> Back up</div>
+            <p class="card-text">
+                Saves a complete copy of all records (inventory, transactions, beneficiaries, settings and your account)
+                to a location you choose. Save it to a <b>USB drive</b> or another computer so your data is safe if this PC breaks.
+            </p>
+            <button class="btn primary" @onclick="BackupAsync" disabled="@Busy">
+                @if (Busy) { <i class="fas fa-spinner fa-spin"></i> } else { <i class="fas fa-download"></i> }
+                Back up now
+            </button>
+        </div>
+
+        <div class="settings-card danger-zone">
+            <div class="settings-card-title"><i class="fas fa-rotate-left"></i> Restore</div>
+            <p class="card-text">
+                Replaces <b>all current data</b> with the data from a backup file. A safety copy of the current data is
+                saved automatically first. The app restarts after restoring and you will need to log in with the
+                account stored in the backup.
+            </p>
+            <button class="btn danger" @onclick="RestoreAsync" disabled="@Busy"><i class="fas fa-upload"></i> Restore from backup…</button>
+        </div>
+    </div>
+}
+
+@code {
+    private BackupInfoDto? _info;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync() => _info = await Use<IBackupService>().Run(s => s.GetInfoAsync());
+
+    private void OpenFolder()
+    {
+        if (_info is not null && Path.GetDirectoryName(_info.DatabasePath) is { } folder)
+            Lifetime.OpenFolder(folder);
+    }
+
+    private Task BackupAsync() => RunBusyAsync(async () =>
+    {
+        var fileName = await Use<IBackupService>().Run(s => Task.FromResult(s.SuggestBackupFileName()));
+        var path = FileDialogs.PickSaveFile(fileName, FileDialogService.BackupFilter, "Save backup");
+        if (path is null) return;
+
+        var result = await Use<IBackupService>().Run(s => s.BackupAsync(path));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+
+        Toast.Success($"Backup saved: {Path.GetFileName(path)}");
+        await LoadAsync();
+    });
+
+    private Task RestoreAsync() => RunBusyAsync(async () =>
+    {
+        var path = FileDialogs.PickOpenFile(FileDialogService.BackupFilter, "Choose a SAIMRS backup to restore");
+        if (path is null) return;
+
+        if (!await Confirm.AskAsync("Restore this backup?",
+                $"All current data will be replaced with the data in \"{Path.GetFileName(path)}\". " +
+                "A safety copy of the current data is kept. The app will restart.",
+                "Restore and restart", isDanger: true, icon: "fa-rotate-left"))
+            return;
+
+        var result = await Use<IBackupService>().Run(s => s.RestoreAsync(path));
+        if (result.IsFailure) { Toast.Error(result.Error!); return; }
+
+        Toast.Success("Restore complete. Restarting…");
+        await Task.Delay(1200);
+        Lifetime.Restart();
+    });
+}
